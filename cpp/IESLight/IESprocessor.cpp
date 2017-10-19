@@ -17,6 +17,7 @@
 #include <map>
 #include <functional>
 #include <clocale>
+#include <cmath>
 #include <float.h>
 #include "IESprocessor.h"
 
