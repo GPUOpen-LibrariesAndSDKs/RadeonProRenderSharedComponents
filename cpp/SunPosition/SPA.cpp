@@ -195,7 +195,7 @@ AzimuthZenithAngle calculateTopocentricSolarPosition(double p, double t, double 
 	double eZeroDegrees = toDegrees(eZero);
 
 	// sanity check: extremely silly values for p and t are silently ignored, disabling refraction correction
-	double deltaEdegrees = (p < 0.0 || p > 3000.0 || t < -273 || t > 273) ?
+	double deltaEdegrees = ( p < 0.0 || p > 3000.0 || t < -273 || t > 273 || (eZeroDegrees + 5.11) == 0.0f ) ?
 		0.0 :
 		((p / 1010) * (283 / (273 + t))
 			* (1.02 / (60 * tan(toRadians(eZeroDegrees + 10.3 / (eZeroDegrees + 5.11))))));
