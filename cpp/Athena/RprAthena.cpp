@@ -400,6 +400,7 @@ AthenaStatus athenaUpload(AthenaOptionsPtr pOptions, const PathStringType* sendF
 	}
 
 	Aws::S3::S3Client s3_client;
+
 	s3_client = 
 		Aws::S3::S3Client(
 			Aws::Auth::AWSCredentials(Aws::Utils::StringUtils::FromWString(pOptions->pImpl->mAccessKey),
@@ -525,7 +526,7 @@ const PathStringType* athenaUniqueFilename(const char* guidstr)
 	uniquename += stream.str();
 	uniquename += L".json";
 
-	return uniquename.c_str();
+	return wcsdup(uniquename.c_str());
 }
 
 AthenaStatus athenaFileWrite(AthenaFilePtr pJson, const PathStringType* filePath)
@@ -605,7 +606,6 @@ public:
 		std::cerr << std::endl;
 	}
 };
- 
 
 void athenaSelfTest()
 {
