@@ -19,7 +19,7 @@ public:
 	AthenaWrapper(const AthenaWrapper&) = delete;
 	AthenaWrapper& operator=(const AthenaWrapper&) = delete;
 
-	bool WriteField(std::string fieldName, std::string value);
+	bool WriteField(const std::string& fieldName, const std::string& value);
 
 	AthenaOptionsPtr GetAthenaOptions(void);
 	AthenaFilePtr GetAthenaFile(void);

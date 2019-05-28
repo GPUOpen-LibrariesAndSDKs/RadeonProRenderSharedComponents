@@ -80,7 +80,7 @@ bool AthenaWrapper::AthenaSendFile(void)
 	return true;
 }
 
-bool AthenaWrapper::WriteField(std::string fieldName, std::string value)
+bool AthenaWrapper::WriteField(const std::string& fieldName, const std::string& value)
 {
 	// ensure valid input
 	if ((fieldName.length() == 0) || (value.length() == 0))

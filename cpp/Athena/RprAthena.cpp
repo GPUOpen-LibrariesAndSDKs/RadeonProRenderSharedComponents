@@ -61,7 +61,7 @@
 
 namespace
 {
-	std::vector<std::wstring> GetFiles(std::wstring folder, std::wstring extension)
+	std::vector<std::wstring> GetFiles(const std::wstring& folder, const std::wstring& extension)
 	{
 		std::vector<std::wstring> existingFiles;
 #ifdef WIN32
@@ -175,7 +175,7 @@ namespace
 		return hash;
 	}
 
-	std::wstring GetHashFromString(std::wstring sourceString)
+	std::wstring GetHashFromString(const std::wstring& sourceString)
 	{
 		std::string convertTester(sourceString.begin(), sourceString.end());
 		void* data = static_cast<void*>(const_cast<char*>(convertTester.c_str()));
@@ -230,7 +230,7 @@ namespace
 		return finalWString;
 	}
 
-	__int64 SystemGetFileSize(std::wstring fileName)
+	__int64 SystemGetFileSize(const std::wstring& fileName)
 	{
 		WIN32_FILE_ATTRIBUTE_DATA fad;
 		if (!GetFileAttributesEx((LPCSTR)fileName.c_str(), GetFileExInfoStandard, &fad))
@@ -243,14 +243,14 @@ namespace
 		return size.QuadPart;
 	}
 
-	std::wstring KS1(std::wstring sk1, std::wstring& fileName, std::wstring& uploadTimestamp, std::wstring PREPEND_META)
+	std::wstring KS1(const std::wstring& sk1, const std::wstring& fileName, const std::wstring& uploadTimestamp, const std::wstring& PREPEND_META)
 	{
 		std::wstring buffer = fileName + sk1 + uploadTimestamp;
 		__int64 dynamic_number = JHash(buffer, buffer.length());
 		return PREPEND_META + std::to_wstring(dynamic_number);
 	}
 
-	std::wstring KS2(std::wstring sk2, __int64 fileSize, std::wstring fileName, __int64 uploadTimestampMilliseconds)
+	std::wstring KS2(const std::wstring& sk2, __int64 fileSize, const std::wstring& fileName, __int64 uploadTimestampMilliseconds)
 	{
 		__int64 numberValue = fileSize + uploadTimestampMilliseconds;
 		std::wstring buffer = fileName + std::to_wstring(numberValue) + sk2;
