@@ -41,15 +41,18 @@ bool AthenaWrapper::AthenaSendFile(void)
 	if (!m_isEnabled)
 		return true;
 
-	std::string athenaUID (athenaGuidStr(m_athenaOptions));
+	char* pAthenaUID = athenaGuidStr(m_athenaOptions);
+	std::string athenaUID (pAthenaUID);
+	free (pAthenaUID);
 	const PathStringType* pUniqueFileName = athenaUniqueFilename(athenaUID.c_str());
 	const std::wstring uniqueFileName (pUniqueFileName);
+	free ((PathStringType*)pUniqueFileName);
 
 	// create and write file
 	AthenaStatus aStatus;
 	std::string appdata (getenv("APPDATA"));
 	std::wstring folderPath = s2ws(appdata);
-	std::wstring fullPath = folderPath + L"//" + uniqueFileName;
+	std::wstring fullPath = folderPath + L"\\" + uniqueFileName;
 	aStatus = athenaFileWrite(m_athenaFile, fullPath.c_str());
 	if (aStatus != AthenaStatus::kSuccess)
 	{
@@ -68,6 +71,11 @@ bool AthenaWrapper::AthenaSendFile(void)
 	{
 		return false;
 	}
+
+	// clear temp file
+	int res = std::remove(ws2s(fullPath).c_str());
+	if (res != 0)
+		return false;
 
 	return true;
 }
