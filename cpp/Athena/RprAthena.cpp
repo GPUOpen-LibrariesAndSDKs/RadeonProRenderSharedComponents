@@ -160,7 +160,7 @@ namespace
 #endif
 	}
 
-	__int64 JHash(std::wstring key, int len)
+	__int64 JHash(std::wstring& key, int len)
 	{
 		unsigned int hash = 0;
 		for (int i = 0; i < len; ++i)
