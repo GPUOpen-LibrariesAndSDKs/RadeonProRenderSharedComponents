@@ -66,7 +66,7 @@ extern "C" {
 	AthenaStatus athenaShutdown(AthenaOptionsPtr pOptions);
 
 	// Upload the collected data.  Athena should be initialized first
-	AthenaStatus athenaUpload(AthenaOptionsPtr pOptions, const PathStringType* sendFolder, PathStringType* fileExtension);
+	AthenaStatus athenaUpload(AthenaOptionsPtr pOptions, const PathStringType* sendFile, PathStringType* fileExtension);
 
 	// Get a guid string.  Caller must release memory.
 	char *athenaGuidStr(AthenaOptionsPtr pOptions);
