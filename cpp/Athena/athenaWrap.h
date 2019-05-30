@@ -1,7 +1,6 @@
 #pragma once
 #include "Athena/RprAthena.h"
 #include <string>
-#include <future>
 
 class AthenaWrapper
 {
@@ -13,14 +12,9 @@ private:
 	AthenaOptionsPtr m_athenaOptions;
 	AthenaFilePtr m_athenaFile;
 	bool m_isEnabled;
-	std::wstring m_folderPath;
-	std::vector<std::future<bool> > sendFileAsync;
 
 public:
 	static AthenaWrapper* GetAthenaWrapper(void);
-
-	void StartNewFile(void);
-	void Finalize(void);
 
 	AthenaWrapper(const AthenaWrapper&) = delete;
 	AthenaWrapper& operator=(const AthenaWrapper&) = delete;
@@ -33,8 +27,6 @@ public:
 	void SetEnabled(bool enable = true);
 
 	bool AthenaSendFile(void);
-
-	void SetTempFolder(std::wstring folderPath);
 };
 
 #define CHECK_ASTATUS(_status)							\
