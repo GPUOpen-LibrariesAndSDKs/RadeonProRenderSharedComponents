@@ -367,9 +367,9 @@ AthenaStatus athenaShutdown(AthenaOptionsPtr pOptions)
 	return kSuccess;
 }
 
-AthenaStatus athenaUpload(AthenaOptionsPtr pOptions, const PathStringType* sendFile, PathStringType* fileExtension)
+AthenaStatus athenaUpload(AthenaOptionsPtr pOptions, const PathStringType* sendFolder, PathStringType* fileExtension)
 {
-	if (!pOptions || !sendFile || !fileExtension || !pOptions->pImpl->mIsOpen)
+	if (!pOptions || !sendFolder || !fileExtension || !pOptions->pImpl->mIsOpen)
 	{
 		return kInvalidParam;
 	}
@@ -407,33 +407,36 @@ AthenaStatus athenaUpload(AthenaOptionsPtr pOptions, const PathStringType* sendF
 			Aws::Utils::StringUtils::FromWString(pOptions->pImpl->mSecretKey)), 
 			config);
 
-	std::wstring fileUpload = sendFile;
-	std::wstring currentFile(fileUpload);
-	currentFile.resize(currentFile.length() - 5);
-
-	std::wcerr << "### File to upload : " << fileUpload.c_str() << std::endl;
-
-	Aws::S3::Model::PutObjectRequest object_request;
-	object_request.WithBucket(
-		Aws::Utils::StringUtils::FromWString(pOptions->pImpl->mBucketName)).WithKey(Aws::Utils::StringUtils::FromWString(currentFile.c_str())).WithStorageClass(Aws::S3::Model::StorageClass::STANDARD);
-
-	std::shared_ptr<Aws::FStream> fileToUpload = Aws::MakeShared<Aws::FStream>(pOptions->pImpl->mALLOCATION_TAG, fileUpload, std::ios_base::in | std::ios_base::binary);
-
-	object_request.SetBody(fileToUpload);
-	auto put_object_outcome = s3_client.PutObject(object_request);
-
-	if (put_object_outcome.IsSuccess())
+	std::vector<std::wstring> fileList = GetFiles(sendFolder, ext);
+	for (auto currentFile : fileList)
 	{
-		std::cerr << "### Upload successful\n";
-		fileToUpload->close();
-		DeleteFile((LPCSTR)fileUpload.c_str());
-	}
-	else
-	{
-		put_object_outcome.GetError().GetExceptionName();
-		put_object_outcome.GetError().GetMessage();
-		std::cerr << "### Upload failed : " << put_object_outcome.GetError().GetExceptionName().c_str() <<
-			" : message : " << put_object_outcome.GetError().GetMessage().c_str() << std::endl;
+		std::wstring fileUpload = sendFolder + kPATH_SEPARATOR + currentFile;
+
+		std::wcerr << "### File to upload : " << fileUpload.c_str() << std::endl;
+
+		Aws::S3::Model::PutObjectRequest object_request;
+		object_request.WithBucket(
+			Aws::Utils::StringUtils::FromWString(pOptions->pImpl->mBucketName)).WithKey(Aws::Utils::StringUtils::FromWString(currentFile.c_str())).WithStorageClass(Aws::S3::Model::StorageClass::STANDARD);
+
+		std::shared_ptr<Aws::FStream> fileToUpload = Aws::MakeShared<Aws::FStream>(pOptions->pImpl->mALLOCATION_TAG, fileUpload, std::ios_base::in | std::ios_base::binary);
+
+		object_request.SetBody(fileToUpload);
+		auto put_object_outcome = s3_client.PutObject(object_request);
+
+		if (put_object_outcome.IsSuccess())
+		{
+			std::cerr << "### Upload successful\n";
+			fileToUpload->close();
+			DeleteFile((LPCSTR)fileUpload.c_str());
+		}
+		else
+		{
+			put_object_outcome.GetError().GetExceptionName();
+			put_object_outcome.GetError().GetMessage();
+			std::cerr << "### Upload failed : " << put_object_outcome.GetError().GetExceptionName().c_str() <<
+				" : message : " << put_object_outcome.GetError().GetMessage().c_str() << std::endl;
+			break;
+		}
 	}
 
 	return successFlag;
