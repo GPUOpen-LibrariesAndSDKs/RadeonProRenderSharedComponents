@@ -909,7 +909,6 @@ RifFilterMl::RifFilterMl(const RifContextWrapper* rifContext, std::uint32_t widt
 	rif_int rifStatus = RIF_SUCCESS;
 
 	// main ML filter
-#ifdef WIN32
 	if (useOpenImageDenoise)
 	{
 		rifStatus = rifContextCreateImageFilter(rifContext->Context(), RIF_IMAGE_FILTER_OPENIMAGE_DENOISE, &mRifImageFilterHandle);
@@ -918,9 +917,6 @@ RifFilterMl::RifFilterMl(const RifContextWrapper* rifContext, std::uint32_t widt
 	{
 		rifStatus = rifContextCreateImageFilter(rifContext->Context(), RIF_IMAGE_FILTER_AI_DENOISE, &mRifImageFilterHandle);
 	}
-#else
-	rifStatus = rifContextCreateImageFilter(rifContext->Context(), RIF_IMAGE_FILTER_AI_DENOISE, &mRifImageFilterHandle);
-#endif
 
 	assert(RIF_SUCCESS == rifStatus);
 
