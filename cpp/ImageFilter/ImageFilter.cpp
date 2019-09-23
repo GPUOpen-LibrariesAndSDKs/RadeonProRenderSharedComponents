@@ -953,7 +953,7 @@ RifFilterMl::RifFilterMl(const RifContextWrapper* rifContext, std::uint32_t widt
 	if (RIF_SUCCESS != rifStatus)
 		throw std::runtime_error("RPR denoiser failed to create remap filter.");
 
-	rifStatus = rifImageFilterSetParameter1f(mAuxFilters[NormalsRemapFilter], "dstLo", -1.0f);
+	rifStatus = rifImageFilterSetParameter1f(mAuxFilters[NormalsRemapFilter], "dstLo", 0.0f);
 	assert(RIF_SUCCESS == rifStatus);
 
 	if (RIF_SUCCESS == rifStatus)
