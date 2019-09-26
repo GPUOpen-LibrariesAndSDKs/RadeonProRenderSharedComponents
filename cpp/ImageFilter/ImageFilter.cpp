@@ -236,6 +236,7 @@ std::vector<rpr_char> RifContextWrapper::GetRprCachePath(rpr_context rprContext)
 
 RifContextGPU::RifContextGPU(const rpr_context rprContext)
 {
+#if defined(_WIN32) || defined(__linux__)
 	int deviceCount = 0;
 
 	rif_int rifStatus = rifGetDeviceCount(rifBackendApiType, &deviceCount);
@@ -279,6 +280,9 @@ RifContextGPU::RifContextGPU(const rpr_context rprContext)
 
 	if (RIF_SUCCESS != rifStatus)
 		throw std::runtime_error("RPR denoiser failed to create RIF command queue.");
+#else
+    throw std::runtime_error("RifContextGPU is not implemented on OSX");
+#endif
 }
 
 RifContextGPU::~RifContextGPU()
@@ -287,6 +291,7 @@ RifContextGPU::~RifContextGPU()
 
 rif_image RifContextGPU::CreateRifImage(const rpr_framebuffer rprFrameBuffer, const rif_image_desc& desc) const
 {
+#if defined(_WIN32) || defined(__linux__)
 	rif_image rifImage = nullptr;
 	rpr_cl_mem clMem = nullptr;
 
@@ -303,6 +308,10 @@ rif_image RifContextGPU::CreateRifImage(const rpr_framebuffer rprFrameBuffer, co
 		throw std::runtime_error("RPR denoiser failed to get frame buffer info.");
 
 	return rifImage;
+#else
+    throw std::runtime_error("RifContextGPU is not implemented on OSX");
+    return nullptr;
+#endif
 }
 
 void RifContextGPU::UpdateInputs(const RifFilterWrapper* rifFilter) const
