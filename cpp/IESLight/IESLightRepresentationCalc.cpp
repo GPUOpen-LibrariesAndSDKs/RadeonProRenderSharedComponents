@@ -26,9 +26,9 @@ void Polar2XYZ(RadeonProRender::float3 &outPoint, double verticalAngle /*polar*/
 	// Phi is horizontal angle
 	double phi = horizontalAngle * DEG2RAD;
 
-	outPoint.x = dist * sin(theta) * cos(phi);
-	outPoint.y = dist * sin(theta) * sin(phi);
-	outPoint.z = dist * cos(theta);
+	outPoint.x = (float) (dist * sin(theta) * cos(phi));
+	outPoint.y = (float) (dist * sin(theta) * sin(phi));
+	outPoint.z = (float) (dist * cos(theta));
 }
 
 // clones all edges in edges array, transforms cloned edges by matrTransform and inserts them to edges array
