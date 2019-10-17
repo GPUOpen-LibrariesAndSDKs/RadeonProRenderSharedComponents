@@ -26,6 +26,13 @@ struct AthenaFileImpl
 	nlohmann::json mJson;
 };
 
+struct AthenaFile
+{
+	AthenaFile() : pImpl(nullptr) {}
+
+	std::unique_ptr<AthenaFileImpl> pImpl;
+};
+
 AthenaWrapper* AthenaWrapper::GetAthenaWrapper(void)
 {
 	static AthenaWrapper instance;
@@ -55,12 +62,12 @@ void AthenaWrapper::Finalize()
 
 void AthenaWrapper::StartNewFile(void)
 {
-	if (m_athenaFile != nullptr)
+	if (m_athenaFile.get() != nullptr)
 		return; // TODO : make this check more pretty
 
 	// Begin new file
-	m_athenaFile = new AthenaFile;
-	m_athenaFile->pImpl = new AthenaFileImpl;
+	m_athenaFile = std::make_unique<AthenaFile>();
+	m_athenaFile->pImpl = std::make_unique<AthenaFileImpl>();
 }
 
 void AthenaWrapper::SetEnabled(bool enable /*= true*/)
@@ -118,9 +125,9 @@ std::wstring athenaUniqueFilename(const char* guidstr)
 	return uniquename;
 }
 
-AthenaStatus athenaFileWrite(AthenaFilePtr pJson, const wchar_t* filePath)
+AthenaStatus athenaFileWrite(AthenaFilePtr& pJson, const wchar_t* filePath)
 {
-	if (!pJson || !filePath)
+	if (!pJson.get() || !filePath)
 	{
 		return kInvalidParam;
 	}
@@ -205,7 +212,7 @@ bool AthenaWrapper::AthenaSendFile(std::function<int(std::string)>& actionFunc)
 		return true;
 
 	// back-off if not inited
-	if (!m_athenaFile)
+	if (!m_athenaFile.get())
 		return false;
 
 	// generate file uid
@@ -231,22 +238,11 @@ bool AthenaWrapper::AthenaSendFile(std::function<int(std::string)>& actionFunc)
 		return false;
 	}
 
-	// close file
-	// athenaFileClose
-	delete m_athenaFile->pImpl;
-	m_athenaFile->pImpl = NULL;
-	m_athenaFile = nullptr;
-
 	// upload file
 	// - need to copy filepath when passing it to keep string data in other thread
 	auto handle = std::async(std::launch::async, [&] (std::wstring fullpath, std::wstring filename)->bool
 	{
 		AthenaStatus aStatus = athenaUpload(fullpath, L"json", filename, actionFunc);
-
-		// clear temp file
-		/*int res = std::remove(ws2s(fullpath).c_str());
-		if (res != 0)
-			return false;*/
 
 		// report command execution result
 		if (aStatus != AthenaStatus::kSuccess)
@@ -271,7 +267,7 @@ bool AthenaWrapper::WriteField(const std::string& fieldName, const std::string& 
 		return false;
 	}
 
-	if (m_athenaFile == nullptr)
+	if (m_athenaFile.get() == nullptr)
 		return false; // file not opened
 
 	// proceed writing
@@ -279,11 +275,6 @@ bool AthenaWrapper::WriteField(const std::string& fieldName, const std::string& 
 
 	// success!
 	return true;
-}
-
-AthenaFilePtr AthenaWrapper::GetAthenaFile(void)
-{
-	return m_athenaFile;
 }
 
 std::wstring s2ws(const std::string& str)

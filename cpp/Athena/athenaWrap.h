@@ -12,15 +12,8 @@ typedef enum
 	kSuccess = 0,
 } AthenaStatus;
 
-struct AthenaFileImpl;
-struct AthenaFile
-{
-	AthenaFile() : pImpl(0) {}
-	
-	AthenaFileImpl* pImpl;
-};
-
-typedef AthenaFile* AthenaFilePtr;
+struct AthenaFile;
+typedef std::unique_ptr<AthenaFile> AthenaFilePtr;
 
 class AthenaWrapper
 {
@@ -44,8 +37,6 @@ public:
 	AthenaWrapper& operator=(const AthenaWrapper&) = delete;
 
 	bool WriteField(const std::string& fieldName, const std::string& value);
-
-	AthenaFilePtr GetAthenaFile(void);
 
 	void SetEnabled(bool enable = true);
 
