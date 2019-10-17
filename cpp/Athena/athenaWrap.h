@@ -1,9 +1,26 @@
 #pragma once
-#include "Athena/RprAthena.h"
 #include <string>
 #include <vector>
 #include <future>
 #include <sstream>
+
+typedef enum
+{
+	kInvalidParam = -2,
+	kInvalidPath = -1,
+	kFailure = 1,
+	kSuccess = 0,
+} AthenaStatus;
+
+struct AthenaFileImpl;
+struct AthenaFile
+{
+	AthenaFile() : pImpl(0) {}
+	
+	AthenaFileImpl* pImpl;
+};
+
+typedef AthenaFile* AthenaFilePtr;
 
 class AthenaWrapper
 {
@@ -12,7 +29,6 @@ private:
 	~AthenaWrapper(void);
 
 private:
-	AthenaOptionsPtr m_athenaOptions;
 	AthenaFilePtr m_athenaFile;
 	bool m_isEnabled;
 	std::wstring m_folderPath;
@@ -29,12 +45,11 @@ public:
 
 	bool WriteField(const std::string& fieldName, const std::string& value);
 
-	AthenaOptionsPtr GetAthenaOptions(void);
 	AthenaFilePtr GetAthenaFile(void);
 
 	void SetEnabled(bool enable = true);
 
-	bool AthenaSendFile(void);
+	bool AthenaSendFile(std::function<int(std::string)>& actionFunc);
 
 	void SetTempFolder(const std::wstring& folderPath);
 };
