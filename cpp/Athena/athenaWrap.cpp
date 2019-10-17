@@ -1,16 +1,37 @@
 #include "athenaWrap.h"
 #include <codecvt>
 #include <string>
+#include <fstream>
+#include <algorithm>
 #ifdef WIN32
+	#include <Windows.h>
 	#include <experimental/filesystem>
 #else
+	#include <sys/time.h>
+	#include <sys/stat.h>
+	#include <sys/types.h>
+	#include <dirent.h>
     #include <sys/stat.h>
 #endif
 #include <chrono>
+#include <time.h>
 #include <thread>
+#include <json.hpp>
 
 std::wstring s2ws(const std::string& str);
 std::string ws2s(const std::wstring& wstr);
+
+struct AthenaFileImpl
+{
+	nlohmann::json mJson;
+};
+
+struct AthenaFile
+{
+	AthenaFile() : pImpl(nullptr) {}
+
+	std::unique_ptr<AthenaFileImpl> pImpl;
+};
 
 AthenaWrapper* AthenaWrapper::GetAthenaWrapper(void)
 {
@@ -19,17 +40,11 @@ AthenaWrapper* AthenaWrapper::GetAthenaWrapper(void)
 }
 
 AthenaWrapper::AthenaWrapper()
-	: m_athenaOptions(nullptr)
-	, m_athenaFile(nullptr)
+	: m_athenaFile(nullptr)
 	, m_isEnabled(true)
 	, m_folderPath()
 	, sendFileAsync()
 {
-	m_athenaOptions = athenaCreateOptions();
-
-	AthenaStatus aStatus = athenaInit(m_athenaOptions);
-	CHECK_ASTATUS(aStatus);
-
 	StartNewFile();
 
 	std::string temp(getenv("TEMP"));
@@ -38,11 +53,7 @@ AthenaWrapper::AthenaWrapper()
 }
 
 AthenaWrapper::~AthenaWrapper()
-{
-	AthenaStatus aStatus = athenaShutdown(m_athenaOptions);
-
-	athenaDestroyOptions(m_athenaOptions);
-}
+{}
 
 void AthenaWrapper::Finalize()
 {
@@ -51,11 +62,12 @@ void AthenaWrapper::Finalize()
 
 void AthenaWrapper::StartNewFile(void)
 {
-	if (m_athenaFile != nullptr)
+	if (m_athenaFile.get() != nullptr)
 		return; // TODO : make this check more pretty
 
 	// Begin new file
-	m_athenaFile = athenaFileOpen();
+	m_athenaFile = std::make_unique<AthenaFile>();
+	m_athenaFile->pImpl = std::make_unique<AthenaFileImpl>();
 }
 
 void AthenaWrapper::SetEnabled(bool enable /*= true*/)
@@ -68,23 +80,146 @@ void AthenaWrapper::SetTempFolder(const std::wstring& folderPath)
 	m_folderPath = folderPath;
 }
 
-bool AthenaWrapper::AthenaSendFile(void)
+std::wstring athenaUniqueFilename(const char* guidstr)
+{
+	if (!guidstr)
+	{
+		return NULL;
+	}
+
+	std::wstring uniquename;
+	uniquename = s2ws(guidstr);
+	uniquename += L"_";
+
+	std::wostringstream stream;
+	//1111111_2019 02 22 21 27 18 0342
+
+#ifdef WIN32
+	SYSTEMTIME systme;
+	GetSystemTime(&systme);
+	stream << std::setfill(L'0') << std::setw(4) << systme.wYear;
+	stream << std::setfill(L'0') << std::setw(2) << systme.wMonth;
+	stream << std::setfill(L'0') << std::setw(2) << systme.wDay;
+	stream << std::setfill(L'0') << std::setw(2) << systme.wHour;
+	stream << std::setfill(L'0') << std::setw(2) << systme.wMinute;
+	stream << std::setfill(L'0') << std::setw(2) << systme.wSecond;
+	stream << std::setfill(L'0') << std::setw(4) << systme.wMilliseconds;
+#else
+	timeval timeval;
+	gettimeofday(&timeval, NULL);
+	long millis = (timeval.tv_sec * 1000) + (timeval.tv_usec / 1000);
+	time_t t = time(NULL);
+	tm* timePtr = localtime(&t);
+	stream << std::setfill(L'0') << std::setw(4) << (timePtr->tm_year) + 1900;
+	stream << std::setfill(L'0') << std::setw(2) << (timePtr->tm_mon) + 1;
+	stream << std::setfill(L'0') << std::setw(2) << (timePtr->tm_mday);
+	stream << std::setfill(L'0') << std::setw(2) << (timePtr->tm_hour);
+	stream << std::setfill(L'0') << std::setw(2) << (timePtr->tm_min);
+	stream << std::setfill(L'0') << std::setw(2) << (timePtr->tm_sec);
+	stream << std::setfill(L'0') << std::setw(4) << millis;
+#endif
+
+	uniquename += stream.str();
+	uniquename += L".json";
+
+	return uniquename;
+}
+
+AthenaStatus athenaFileWrite(AthenaFilePtr& pJson, const wchar_t* filePath)
+{
+	if (!pJson.get() || !filePath)
+	{
+		return kInvalidParam;
+	}
+
+#ifdef WIN32
+	// MSVS added an overload to accommodate using open with wide strings where xcode did not.
+	std::ofstream o(filePath);
+#else
+	// thus different path for xcode is needed
+	std::string s_filePath = _ws2s(filePath);
+	std::ofstream o(s_filePath);
+#endif
+
+	o << std::setw(4) << pJson->pImpl->mJson << std::endl;
+	o.close();
+	return kSuccess;
+}
+
+void strPrepareForPython(std::string& source)
+{
+	size_t start_pos = 0;
+	while ((start_pos = source.find("\\", start_pos)) != std::string::npos)
+	{
+		source.replace(start_pos, 1, "//");
+	}
+}
+
+AthenaStatus athenaUpload(std::wstring& sendFile, wchar_t* fileExtension, std::wstring& filename, std::function<int(std::string)>& actionFunc)
+{
+	if ((sendFile.length() == 0) || !fileExtension)
+	{
+		return kInvalidParam;
+	}
+
+	std::wstring ext(L"json");
+	if (ext != fileExtension)
+	{
+		return kInvalidParam;
+	}
+
+	AthenaStatus successFlag = kSuccess;
+
+	std::string str_sendFile = ws2s(sendFile);
+	std::string str_filename = ws2s(filename);
+
+	strPrepareForPython(str_sendFile);
+	strPrepareForPython(str_filename);
+
+	std::string pyCommand = 
+		"import boto3 \n"
+		"from botocore.exceptions import ClientError \n"
+		"from boto3.exceptions import S3UploadFailedError \n"
+		"ACCESS_KEY = '##removed##' \n"
+		"SECRET_KEY = '##removed##' \n"
+		"BUCKET_NAME = 'amd-athena-prorender' \n"
+		"try: \n"
+		"	client = boto3.client('s3', aws_access_key_id=ACCESS_KEY, aws_secret_access_key=SECRET_KEY) \n"
+		"	client.upload_file('" + str_sendFile + "', BUCKET_NAME, '" + str_filename + "') \n"
+		"	print(\"successfully uploaded data to AWS!\")\n"
+		"except S3UploadFailedError as e: \n"
+		"	print(str(e)) \n"
+		"except ClientError as e: \n"
+		"	print (e.response['Error']['Code']) \n"
+		"	print('ClientError') \n"
+		"except BaseException as e: \n"
+		"	print('An error occurred.') \n"
+		"	print(type(e)) \n"
+		"	print(str(e)) \n"
+		"finally: \n"
+		"	os.remove('" + str_sendFile + "') \n";
+
+	int res = actionFunc(pyCommand);
+	successFlag = (AthenaStatus) res;
+
+	return successFlag;
+}
+
+bool AthenaWrapper::AthenaSendFile(std::function<int(std::string)>& actionFunc)
 {
 	// athena disabled by ui => return
 	if (!m_isEnabled)
 		return true;
 
 	// back-off if not inited
-	if (!m_athenaOptions)
+	if (!m_athenaFile.get())
 		return false;
 
 	// generate file uid
-	char* pAthenaUID = athenaGuidStr(m_athenaOptions);
-	std::string athenaUID (pAthenaUID);
-	free (pAthenaUID);
-	const PathStringType* pUniqueFileName = athenaUniqueFilename(athenaUID.c_str());
-	const std::wstring uniqueFileName (pUniqueFileName);
-	free ((PathStringType*)pUniqueFileName);
+	srand(time(NULL));
+	std::string athenaUID = std::to_string(rand());
+
+	const std::wstring uniqueFileName = athenaUniqueFilename(athenaUID.c_str());
 
 	// create folder
 #ifdef WIN32
@@ -103,31 +238,20 @@ bool AthenaWrapper::AthenaSendFile(void)
 		return false;
 	}
 
-	aStatus = athenaFileClose(m_athenaFile);
-	m_athenaFile = nullptr;
-	if (aStatus != AthenaStatus::kSuccess)
-	{
-		return false;
-	}
-
 	// upload file
 	// - need to copy filepath when passing it to keep string data in other thread
-	auto handle = std::async(std::launch::async, [] (AthenaOptionsPtr pOptions, std::wstring fullpath)->bool 
+	auto handle = std::async(std::launch::async, [&] (std::wstring fullpath, std::wstring filename)->bool
 	{
-		AthenaStatus aStatus = athenaUpload(pOptions, fullpath.c_str(), L"json");
+		AthenaStatus aStatus = athenaUpload(fullpath, L"json", filename, actionFunc);
+
+		// report command execution result
 		if (aStatus != AthenaStatus::kSuccess)
 		{
 			return false;
 		}
-
-		// clear temp file
-		int res = std::remove(ws2s(fullpath).c_str());
-		if (res != 0)
-			return false;
-
 		return true;
 	}, 
-	m_athenaOptions, fullPath);
+	fullPath, uniqueFileName);
 
 	// move future so that routine could be executed in background
 	sendFileAsync.push_back(std::move(handle));
@@ -143,30 +267,14 @@ bool AthenaWrapper::WriteField(const std::string& fieldName, const std::string& 
 		return false;
 	}
 
-	if (m_athenaFile == nullptr)
+	if (m_athenaFile.get() == nullptr)
 		return false; // file not opened
 
 	// proceed writing
-	AthenaStatus aStatus;
-	aStatus = athenaFileSetField(m_athenaFile, fieldName.c_str(), value.c_str());
-	CHECK_ASTATUS(aStatus);
-	if (aStatus != AthenaStatus::kSuccess)
-	{
-		return false;
-	}
+	m_athenaFile->pImpl->mJson[fieldName] = value;
 
 	// success!
 	return true;
-}
-
-AthenaOptionsPtr AthenaWrapper::GetAthenaOptions(void)
-{
-	return m_athenaOptions;
-}
-
-AthenaFilePtr AthenaWrapper::GetAthenaFile(void)
-{
-	return m_athenaFile;
 }
 
 std::wstring s2ws(const std::string& str)
