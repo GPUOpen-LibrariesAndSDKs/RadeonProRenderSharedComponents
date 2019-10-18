@@ -137,7 +137,7 @@ AthenaStatus athenaFileWrite(AthenaFilePtr& pJson, const wchar_t* filePath)
 	std::ofstream o(filePath);
 #else
 	// thus different path for xcode is needed
-	std::string s_filePath = _ws2s(filePath);
+	std::string s_filePath = ws2s(filePath);
 	std::ofstream o(s_filePath);
 #endif
 
