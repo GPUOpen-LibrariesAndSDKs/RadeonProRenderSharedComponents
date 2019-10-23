@@ -47,9 +47,17 @@ AthenaWrapper::AthenaWrapper()
 {
 	StartNewFile();
 
+#ifdef WIN32
 	std::string temp(getenv("TEMP"));
+#else
+    std::string temp(getenv("TMPDIR"));
+#endif
 	m_folderPath = s2ws(temp);
+#ifdef WIN32
 	m_folderPath += L"\\rprathena";
+#else
+    m_folderPath += L"rprathena";
+#endif
 }
 
 AthenaWrapper::~AthenaWrapper()
@@ -231,7 +239,11 @@ bool AthenaWrapper::AthenaSendFile(std::function<int(std::string)>& actionFunc)
 
 	// create and write file
 	AthenaStatus aStatus;
-	std::wstring fullPath = m_folderPath + L"\\" + uniqueFileName;;
+#ifdef WIN32
+	std::wstring fullPath = m_folderPath + L"\\" + uniqueFileName;
+#else
+    std::wstring fullPath = m_folderPath + L"/" + uniqueFileName;
+#endif
 	aStatus = athenaFileWrite(m_athenaFile, fullPath.c_str());
 	if (aStatus != AthenaStatus::kSuccess)
 	{
