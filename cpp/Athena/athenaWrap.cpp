@@ -224,7 +224,7 @@ bool AthenaWrapper::AthenaSendFile(std::function<int(std::string)>& actionFunc)
 		return false;
 
 	// generate file uid
-	srand(time(NULL));
+	srand(static_cast<unsigned int>(time(NULL)));;
 	std::string athenaUID = std::to_string(rand());
 
 	const std::wstring uniqueFileName = athenaUniqueFilename(athenaUID.c_str());
