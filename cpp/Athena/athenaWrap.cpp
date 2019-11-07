@@ -16,22 +16,9 @@
 #include <chrono>
 #include <time.h>
 #include <thread>
-#include <json.hpp>
 
 std::wstring s2ws(const std::string& str);
 std::string ws2s(const std::wstring& wstr);
-
-struct AthenaFileImpl
-{
-	nlohmann::json mJson;
-};
-
-struct AthenaFile
-{
-	AthenaFile() : pImpl(nullptr) {}
-
-	std::unique_ptr<AthenaFileImpl> pImpl;
-};
 
 AthenaWrapper* AthenaWrapper::GetAthenaWrapper(void)
 {
@@ -224,7 +211,7 @@ bool AthenaWrapper::AthenaSendFile(std::function<int(std::string)>& actionFunc)
 		return false;
 
 	// generate file uid
-	srand(static_cast<unsigned int>(time(NULL)));;
+	srand(static_cast<unsigned int>(time(NULL)));
 	std::string athenaUID = std::to_string(rand());
 
 	const std::wstring uniqueFileName = athenaUniqueFilename(athenaUID.c_str());
@@ -268,24 +255,6 @@ bool AthenaWrapper::AthenaSendFile(std::function<int(std::string)>& actionFunc)
 	// move future so that routine could be executed in background
 	sendFileAsync.push_back(std::move(handle));
 
-	return true;
-}
-
-bool AthenaWrapper::WriteField(const std::string& fieldName, const std::string& value)
-{
-	// ensure valid input
-	if ((fieldName.length() == 0) || (value.length() == 0))
-	{
-		return false;
-	}
-
-	if (m_athenaFile.get() == nullptr)
-		return false; // file not opened
-
-	// proceed writing
-	m_athenaFile->pImpl->mJson[fieldName] = value;
-
-	// success!
 	return true;
 }
 
