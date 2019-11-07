@@ -3,6 +3,7 @@
 #include <vector>
 #include <future>
 #include <sstream>
+#include <json.hpp>
 
 typedef enum
 {
@@ -14,6 +15,18 @@ typedef enum
 
 struct AthenaFile;
 typedef std::unique_ptr<AthenaFile> AthenaFilePtr;
+
+struct AthenaFileImpl
+{
+	nlohmann::json mJson;
+};
+
+struct AthenaFile
+{
+	AthenaFile() : pImpl(nullptr) {}
+
+	std::unique_ptr<AthenaFileImpl> pImpl;
+};
 
 class AthenaWrapper
 {
@@ -36,7 +49,24 @@ public:
 	AthenaWrapper(const AthenaWrapper&) = delete;
 	AthenaWrapper& operator=(const AthenaWrapper&) = delete;
 
-	bool WriteField(const std::string& fieldName, const std::string& value);
+	template <class T>
+	bool WriteField(const std::string& fieldName, const T& value)
+	{
+		// ensure valid input
+		if (fieldName.length() == 0)
+		{
+			return false;
+		}
+
+		if (m_athenaFile.get() == nullptr)
+			return false; // file not opened
+
+		// proceed writing
+		m_athenaFile->pImpl->mJson[fieldName] = value;
+
+		// success!
+		return true;
+	}
 
 	void SetEnabled(bool enable = true);
 
