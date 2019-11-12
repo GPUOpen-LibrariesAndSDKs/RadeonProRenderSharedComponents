@@ -5,6 +5,7 @@
 #include <ostream>
 #include <sstream>
 #include <iostream>
+#include <../RPRStringIDMapper.h>
 
 // execute FireRender func and check for an error
 #define CHECK_NO_ERROR(func)	{ \
@@ -13,79 +14,12 @@
 									throw std::runtime_error("Radeon ProRender error (" + std::to_string(status) + ") in " + std::string(__FILE__) + ":" + std::to_string(__LINE__)); \
 								}
 
-std::vector<RPRX_DEFINE_PARAM_MATERIAL> g_rprxParamList;
-
-std::vector<RPRX_DEFINE_PARAM_MATERIAL>& GetRPRXParamList(void)
-{
-	return g_rprxParamList;
-}
+RPRStringIDMapper g_rprStringMapper;
 
 namespace
 {
 	const std::string kTab = "    "; // default 4spaces tab for xml writer
 	const int kVersion = RPR_VERSION_MAJOR_MINOR_REVISION;
-	//need different maps because RPR_MATERIAL* constants have not an unique value;
-	const std::map<int, std::string> kMaterialTypeNames{ { RPR_MATERIAL_NODE_DIFFUSE, "DIFFUSE" },
-	{ RPR_MATERIAL_NODE_MICROFACET, "MICROFACET" },
-	{ RPR_MATERIAL_NODE_REFLECTION, "REFLECTION" },
-	{ RPR_MATERIAL_NODE_REFRACTION, "REFRACTION" },
-	{ RPR_MATERIAL_NODE_MICROFACET_REFRACTION, "MICROFACET_REFRACTION" },
-	{ RPR_MATERIAL_NODE_TRANSPARENT, "TRANSPARENT" },
-	{ RPR_MATERIAL_NODE_EMISSIVE, "EMISSIVE" },
-	{ RPR_MATERIAL_NODE_WARD, "WARD" },
-	{ RPR_MATERIAL_NODE_ADD, "ADD" },
-	{ RPR_MATERIAL_NODE_BLEND, "BLEND" },
-	{ RPR_MATERIAL_NODE_ARITHMETIC, "ARITHMETIC" },
-	{ RPR_MATERIAL_NODE_FRESNEL, "FRESNEL" },
-	{ RPR_MATERIAL_NODE_NORMAL_MAP, "NORMAL_MAP" },
-	{ RPR_MATERIAL_NODE_IMAGE_TEXTURE, "IMAGE_TEXTURE" },
-	{ RPR_MATERIAL_NODE_NOISE2D_TEXTURE, "NOISE2D_TEXTURE" },
-	{ RPR_MATERIAL_NODE_DOT_TEXTURE, "DOT_TEXTURE" },
-	{ RPR_MATERIAL_NODE_GRADIENT_TEXTURE, "GRADIENT_TEXTURE" },
-	{ RPR_MATERIAL_NODE_CHECKER_TEXTURE, "CHECKER_TEXTURE" },
-	{ RPR_MATERIAL_NODE_CONSTANT_TEXTURE, "CONSTANT_TEXTURE" },
-	{ RPR_MATERIAL_NODE_INPUT_LOOKUP, "INPUT_LOOKUP" },
-	{ RPR_MATERIAL_NODE_UBERV2, "UBER" },
-	{ RPR_MATERIAL_NODE_BLEND_VALUE, "BLEND_VALUE" },
-	{ RPR_MATERIAL_NODE_PASSTHROUGH, "PASSTHROUGH" },
-	{ RPR_MATERIAL_NODE_ORENNAYAR, "ORENNAYAR" },
-	{ RPR_MATERIAL_NODE_FRESNEL_SCHLICK, "FRESNEL_SCHLICK" },
-	{ RPR_MATERIAL_NODE_DIFFUSE_REFRACTION, "DIFFUSE_REFRACTION" },
-	{ RPR_MATERIAL_NODE_BUMP_MAP, "BUMP_MAP" } };
-
-	const std::map<std::string, int> kNodeTypesMap = { { "INPUT_COLOR4F", RPR_MATERIAL_NODE_INPUT_TYPE_FLOAT4 },
-	{ "INPUT_FLOAT1", RPR_MATERIAL_NODE_INPUT_TYPE_FLOAT4 },
-	{ "INPUT_UINT", RPR_MATERIAL_NODE_INPUT_TYPE_UINT },
-	{ "INPUT_NODE", RPR_MATERIAL_NODE_INPUT_TYPE_NODE },
-	{ "INPUT_TEXTURE", RPR_MATERIAL_NODE_INPUT_TYPE_IMAGE },
-	{ "DIFFUSE", RPR_MATERIAL_NODE_DIFFUSE },
-	{ "MICROFACET", RPR_MATERIAL_NODE_MICROFACET },
-	{ "REFLECTION", RPR_MATERIAL_NODE_REFLECTION },
-	{ "REFRACTION", RPR_MATERIAL_NODE_REFRACTION },
-	{ "MICROFACET_REFRACTION", RPR_MATERIAL_NODE_MICROFACET_REFRACTION },
-	{ "TRANSPARENT", RPR_MATERIAL_NODE_TRANSPARENT },
-	{ "EMISSIVE", RPR_MATERIAL_NODE_EMISSIVE },
-	{ "WARD", RPR_MATERIAL_NODE_WARD },
-	{ "ADD", RPR_MATERIAL_NODE_ADD },
-	{ "BLEND", RPR_MATERIAL_NODE_BLEND },
-	{ "ARITHMETIC", RPR_MATERIAL_NODE_ARITHMETIC },
-	{ "FRESNEL", RPR_MATERIAL_NODE_FRESNEL },
-	{ "NORMAL_MAP", RPR_MATERIAL_NODE_NORMAL_MAP },
-	{ "IMAGE_TEXTURE", RPR_MATERIAL_NODE_IMAGE_TEXTURE },
-	{ "NOISE2D_TEXTURE", RPR_MATERIAL_NODE_NOISE2D_TEXTURE },
-	{ "DOT_TEXTURE", RPR_MATERIAL_NODE_DOT_TEXTURE },
-	{ "GRADIENT_TEXTURE", RPR_MATERIAL_NODE_GRADIENT_TEXTURE },
-	{ "CHECKER_TEXTURE", RPR_MATERIAL_NODE_CHECKER_TEXTURE },
-	{ "CONSTANT_TEXTURE", RPR_MATERIAL_NODE_CONSTANT_TEXTURE },
-	{ "INPUT_LOOKUP", RPR_MATERIAL_NODE_INPUT_LOOKUP },
-	{ "STANDARD", RPR_MATERIAL_NODE_UBERV2 },
-	{ "UBER", RPR_MATERIAL_NODE_UBERV2 },
-	{ "BLEND_VALUE", RPR_MATERIAL_NODE_BLEND_VALUE },
-	{ "PASSTHROUGH", RPR_MATERIAL_NODE_PASSTHROUGH },
-	{ "ORENNAYAR", RPR_MATERIAL_NODE_ORENNAYAR },
-	{ "FRESNEL_SCHLICK", RPR_MATERIAL_NODE_FRESNEL_SCHLICK },
-	{ "DIFFUSE_REFRACTION", RPR_MATERIAL_NODE_DIFFUSE_REFRACTION },
-	{ "BUMP_MAP", RPR_MATERIAL_NODE_BUMP_MAP } };
 
 	struct Param
 	{
@@ -202,163 +136,13 @@ namespace
 
 void InitParamList(void)
 {
-	if (g_rprxParamList.size() != 0) // if it's the first time , fill the variable
-		return;
 
-	g_rprxParamList.push_back(RPRX_DEFINE_PARAM_MATERIAL(RPRX_UBER_MATERIAL_DIFFUSE_COLOR, "diffuse.color"));
-	g_rprxParamList.push_back(RPRX_DEFINE_PARAM_MATERIAL(RPRX_UBER_MATERIAL_DIFFUSE_WEIGHT, "diffuse.weight"));
-	g_rprxParamList.push_back(RPRX_DEFINE_PARAM_MATERIAL(RPRX_UBER_MATERIAL_DIFFUSE_ROUGHNESS, "diffuse.roughness"));
-	g_rprxParamList.push_back(RPRX_DEFINE_PARAM_MATERIAL(RPRX_UBER_MATERIAL_DIFFUSE_NORMAL, "diffuse.normal"));
-	g_rprxParamList.push_back(RPRX_DEFINE_PARAM_MATERIAL(RPRX_UBER_MATERIAL_REFLECTION_COLOR, "reflection.color"));
-	g_rprxParamList.push_back(RPRX_DEFINE_PARAM_MATERIAL(RPRX_UBER_MATERIAL_REFLECTION_WEIGHT, "reflection.weight"));
-	g_rprxParamList.push_back(RPRX_DEFINE_PARAM_MATERIAL(RPRX_UBER_MATERIAL_REFLECTION_ROUGHNESS, "reflection.roughness"));
-	g_rprxParamList.push_back(RPRX_DEFINE_PARAM_MATERIAL(RPRX_UBER_MATERIAL_REFLECTION_ANISOTROPY, "reflection.anisotropy"));
-	g_rprxParamList.push_back(RPRX_DEFINE_PARAM_MATERIAL(RPRX_UBER_MATERIAL_REFLECTION_ANISOTROPY_ROTATION, "reflection.anistropyRotation"));
-	g_rprxParamList.push_back(RPRX_DEFINE_PARAM_MATERIAL(RPRX_UBER_MATERIAL_REFLECTION_MODE, "reflection.mode"));
-	g_rprxParamList.push_back(RPRX_DEFINE_PARAM_MATERIAL(RPRX_UBER_MATERIAL_REFLECTION_IOR, "reflection.ior"));
-	g_rprxParamList.push_back(RPRX_DEFINE_PARAM_MATERIAL(RPRX_UBER_MATERIAL_REFLECTION_NORMAL, "reflection.normal"));
-	g_rprxParamList.push_back(RPRX_DEFINE_PARAM_MATERIAL(RPRX_UBER_MATERIAL_REFRACTION_COLOR, "refraction.color"));
-	g_rprxParamList.push_back(RPRX_DEFINE_PARAM_MATERIAL(RPRX_UBER_MATERIAL_REFRACTION_WEIGHT, "refraction.weight"));
-	g_rprxParamList.push_back(RPRX_DEFINE_PARAM_MATERIAL(RPRX_UBER_MATERIAL_REFRACTION_ROUGHNESS, "refraction.roughness"));
-	g_rprxParamList.push_back(RPRX_DEFINE_PARAM_MATERIAL(RPRX_UBER_MATERIAL_REFRACTION_IOR, "refraction.ior"));
-	g_rprxParamList.push_back(RPRX_DEFINE_PARAM_MATERIAL(RPRX_UBER_MATERIAL_REFRACTION_THIN_SURFACE, "refraction.thinSurface"));
-	g_rprxParamList.push_back(RPRX_DEFINE_PARAM_MATERIAL(RPRX_UBER_MATERIAL_REFRACTION_ABSORPTION_COLOR, "refraction.absorptionColor"));
-	g_rprxParamList.push_back(RPRX_DEFINE_PARAM_MATERIAL(RPRX_UBER_MATERIAL_REFRACTION_ABSORPTION_DISTANCE, "refraction.absorptionDistance"));
-	g_rprxParamList.push_back(RPRX_DEFINE_PARAM_MATERIAL(RPRX_UBER_MATERIAL_REFRACTION_CAUSTICS, "refraction.caustics"));
-	g_rprxParamList.push_back(RPRX_DEFINE_PARAM_MATERIAL(RPRX_UBER_MATERIAL_COATING_COLOR, "coating.color"));
-	g_rprxParamList.push_back(RPRX_DEFINE_PARAM_MATERIAL(RPRX_UBER_MATERIAL_COATING_WEIGHT, "coating.weight"));
-	g_rprxParamList.push_back(RPRX_DEFINE_PARAM_MATERIAL(RPRX_UBER_MATERIAL_COATING_ROUGHNESS, "coating.roughness"));
-	g_rprxParamList.push_back(RPRX_DEFINE_PARAM_MATERIAL(RPRX_UBER_MATERIAL_COATING_MODE, "coating.mode"));
-	g_rprxParamList.push_back(RPRX_DEFINE_PARAM_MATERIAL(RPRX_UBER_MATERIAL_COATING_IOR, "coating.ior"));
-	g_rprxParamList.push_back(RPRX_DEFINE_PARAM_MATERIAL(RPRX_UBER_MATERIAL_COATING_METALNESS, "coating.metalness"));
-	g_rprxParamList.push_back(RPRX_DEFINE_PARAM_MATERIAL(RPRX_UBER_MATERIAL_COATING_NORMAL, "coating.normal"));
-	g_rprxParamList.push_back(RPRX_DEFINE_PARAM_MATERIAL(RPRX_UBER_MATERIAL_COATING_TRANSMISSION_COLOR, "coating.transmissionColor"));
-	g_rprxParamList.push_back(RPRX_DEFINE_PARAM_MATERIAL(RPRX_UBER_MATERIAL_COATING_THICKNESS, "coating.thickness"));
-	g_rprxParamList.push_back(RPRX_DEFINE_PARAM_MATERIAL(RPRX_UBER_MATERIAL_SHEEN, "sheen"));
-	g_rprxParamList.push_back(RPRX_DEFINE_PARAM_MATERIAL(RPRX_UBER_MATERIAL_SHEEN_TINT, "sheen.tint"));
-	g_rprxParamList.push_back(RPRX_DEFINE_PARAM_MATERIAL(RPRX_UBER_MATERIAL_SHEEN_WEIGHT, "sheen.weight"));
-	g_rprxParamList.push_back(RPRX_DEFINE_PARAM_MATERIAL(RPRX_UBER_MATERIAL_EMISSION_COLOR, "emission.color"));
-	g_rprxParamList.push_back(RPRX_DEFINE_PARAM_MATERIAL(RPRX_UBER_MATERIAL_EMISSION_WEIGHT, "emission.weight"));
-	g_rprxParamList.push_back(RPRX_DEFINE_PARAM_MATERIAL(RPRX_UBER_MATERIAL_EMISSION_MODE, "emission.mode"));
-	g_rprxParamList.push_back(RPRX_DEFINE_PARAM_MATERIAL(RPRX_UBER_MATERIAL_TRANSPARENCY, "transparency"));
-	g_rprxParamList.push_back(RPRX_DEFINE_PARAM_MATERIAL(RPRX_UBER_MATERIAL_SSS_SCATTER_COLOR, "sss.scatterColor"));
-	g_rprxParamList.push_back(RPRX_DEFINE_PARAM_MATERIAL(RPRX_UBER_MATERIAL_SSS_SCATTER_DISTANCE, "sss.scatterDistance"));
-	g_rprxParamList.push_back(RPRX_DEFINE_PARAM_MATERIAL(RPRX_UBER_MATERIAL_SSS_SCATTER_DIRECTION, "sss.scatterDirection"));
-	g_rprxParamList.push_back(RPRX_DEFINE_PARAM_MATERIAL(RPRX_UBER_MATERIAL_SSS_WEIGHT, "sss.weight"));
-	g_rprxParamList.push_back(RPRX_DEFINE_PARAM_MATERIAL(RPRX_UBER_MATERIAL_SSS_MULTISCATTER, "sss.multiscatter"));
-	g_rprxParamList.push_back(RPRX_DEFINE_PARAM_MATERIAL(RPRX_UBER_MATERIAL_BACKSCATTER_WEIGHT, "backscatter.weight"));
-	g_rprxParamList.push_back(RPRX_DEFINE_PARAM_MATERIAL(RPRX_UBER_MATERIAL_BACKSCATTER_COLOR, "backscatter.color"));
-}
-
-// return true if success
-bool ParseRPRX (
-	rprx_material materialX ,
-	rprx_context contextX, 
-	std::set<rpr_material_node>& nodeList ,
-	std::set<rprx_material>& nodeListX ,
-	const std::string& folder ,
-	std::unordered_map<rpr_image , RPR_MATERIAL_XML_EXPORT_TEXTURE_PARAM>& textureParameter,
-	const std::string& material_name,
-	bool exportImageUV
-	)
-{
-	rpr_int status = RPR_SUCCESS;
-
-	//check if the node already stored
-	if ( nodeListX.find(materialX) != nodeListX.end() )
-	{
-		return true;
-	}
-	
-	nodeListX.insert(materialX);
-
-	rpr_material_node_type type = 0;
-	rprMaterialNodeGetInfo(materialX, RPR_MATERIAL_NODE_TYPE, sizeof(rpr_material_node_type), &type, nullptr);
-
-#ifdef  _DEBUG
-	{
-		auto it = kMaterialTypeNames.find(type);
-		if (it != kMaterialTypeNames.end())
-		{
-			std::string matName = it->second;
-			DebugPrint("processed node name = %s", matName);
-		}
-	}
-#endif
-
-	for(int iParam=0; iParam<g_rprxParamList.size(); iParam++)
-	{
-		rpr_parameter_type type = 0;
-		status = rprxMaterialGetParameterType(contextX,materialX,g_rprxParamList[iParam].param,&type); 
-		if (status != RPR_SUCCESS) 
-		{ 
-			return false; 
-		}
-
-		if ( type == RPRX_PARAMETER_TYPE_FLOAT4 )
-		{
-			float value4f[] = { 0.0f,0.0f,0.0f,0.0f };
-			status = rprxMaterialGetParameterValue(contextX,materialX,g_rprxParamList[iParam].param,&value4f); 
-			if (status != RPR_SUCCESS) 
-			{ 
-				return false; 
-			}
-		}
-		else if ( type == RPRX_PARAMETER_TYPE_UINT )
-		{
-			unsigned int value1u = 0;
-			status = rprxMaterialGetParameterValue(contextX,materialX,g_rprxParamList[iParam].param,&value1u); 
-			if (status != RPR_SUCCESS) 
-			{ 
-				return false; 
-			}
-		}
-		else if ( type == RPRX_PARAMETER_TYPE_NODE )
-		{
-			rpr_material_node valueN = 0;
-			status = rprxMaterialGetParameterValue(contextX,materialX,g_rprxParamList[iParam].param,&valueN); if (status != RPR_SUCCESS) { return false; };
-
-			if ( valueN )
-			{
-				
-				bool originIsUberColor = false;
-				if (   g_rprxParamList[iParam].param == RPRX_UBER_MATERIAL_DIFFUSE_COLOR
-					|| g_rprxParamList[iParam].param == RPRX_UBER_MATERIAL_REFLECTION_COLOR
-					|| g_rprxParamList[iParam].param == RPRX_UBER_MATERIAL_REFRACTION_COLOR
-					|| g_rprxParamList[iParam].param == RPRX_UBER_MATERIAL_REFRACTION_ABSORPTION_COLOR
-					|| g_rprxParamList[iParam].param == RPRX_UBER_MATERIAL_COATING_COLOR
-					|| g_rprxParamList[iParam].param == RPRX_UBER_MATERIAL_COATING_TRANSMISSION_COLOR
-					|| g_rprxParamList[iParam].param == RPRX_UBER_MATERIAL_EMISSION_COLOR
-					|| g_rprxParamList[iParam].param == RPRX_UBER_MATERIAL_SSS_SCATTER_COLOR
-					|| g_rprxParamList[iParam].param == RPRX_UBER_MATERIAL_BACKSCATTER_COLOR
-					)
-				{
-					originIsUberColor = true;
-				}
-
-				bool success = ParseRPR(valueN , nodeList , nodeListX , folder , originIsUberColor, textureParameter, material_name, exportImageUV );
-				if  ( !success )
-				{
-					return false;
-				}
-				
-			}
-		}
-		else
-		{
-			return false;
-		}
-
-	}
-
-	return true;
 }
 
 // return true if success
 bool ParseRPR (
 	rpr_material_node material,
 	std::set<rpr_material_node>& nodeList,
-	std::set<rprx_material>& nodeListX,
 	const std::string& folder,
 	bool originIsUberColor, // set to TRUE if this 'material' is connected to a COLOR input of the UBER material
 	std::unordered_map<rpr_image, RPR_MATERIAL_XML_EXPORT_TEXTURE_PARAM>& textureParameter,
@@ -381,12 +165,9 @@ bool ParseRPR (
 
 #ifdef  _DEBUG
 	{
-		auto it = kMaterialTypeNames.find(type);
-		if (it != kMaterialTypeNames.end())
-		{
-			std::string matName = it->second;
-			DebugPrint("processed node name = %s", matName);
-		}
+		std::string typeName;
+		g_rprStringMapper.RPRMaterialType_id_to_string(type,typeName);
+		DebugPrint("processed node name = %s", typeName.c_str());
 	}
 #endif
 
@@ -402,7 +183,8 @@ bool ParseRPR (
 			size_t read_count = 0;
 			uint32_t id = 0;
 			CHECK_NO_ERROR(rprMaterialNodeGetInputInfo(material, i, RPR_MATERIAL_NODE_INPUT_NAME, sizeof(uint32_t), &id, nullptr));
-			std::string param_name = id2param[id];
+			std::string param_name;
+			g_rprStringMapper.RPRMaterialInput_id_to_string(id,param_name);
 
 			rpr_material_node ref_node = nullptr;
 			status = rprMaterialNodeGetInputInfo(material, i, RPR_MATERIAL_NODE_INPUT_VALUE, sizeof(ref_node), &ref_node, nullptr);
@@ -418,7 +200,7 @@ bool ParseRPR (
 				}
 				else
 				{
-					ParseRPR(ref_node, nodeList, nodeListX, folder, originIsUberColor, textureParameter, material_name, exportImageUV);
+					ParseRPR(ref_node, nodeList, folder, originIsUberColor, textureParameter, material_name, exportImageUV);
 				}
 			}
 		}
@@ -449,18 +231,15 @@ bool ParseRPR (
 
 void ExportMaterials(const std::string& filename,
 	const std::set<rpr_material_node>& nodeList,
-	const std::set<rprx_material>& nodeListX,
-	const std::vector<RPRX_DEFINE_PARAM_MATERIAL>& rprxParamList,
-	rprx_context contextX,
 	std::unordered_map<rpr_image, RPR_MATERIAL_XML_EXPORT_TEXTURE_PARAM>& textureParameter,
-	void* closureNode,  // pointer to a rpr_material_node or a rprx_material
+	rpr_material_node closureNode,
 	const std::string& material_name,// example : "Emissive_Fluorescent_Magenta"
 	const std::map<rpr_image, EXTRA_IMAGE_DATA>& extraImageData,
 	bool exportImageUV
 )
 {
 	XmlWriter writer(filename);
-	if (nodeListX.size() == 0 && nodeList.size() == 0)
+	if (nodeList.size() == 0)
 	{
 		std::cout << "MaterialExport error: materials input array is nullptr" << std::endl;
 		return;
@@ -507,28 +286,6 @@ void ExportMaterials(const std::string& filename,
 			while (used_names.count(mat_node_name))
 			{
 				mat_node_name = "node" + std::to_string(postfix_id);
-				++postfix_id;
-			}
-
-			if (mat == closureNode)
-				closureNodeName = mat_node_name;
-
-			objects[mat] = mat_node_name;
-			used_names.insert(mat_node_name);
-		}
-
-		for (const auto& iNode : nodeListX)
-		{
-			rprx_material mat = iNode;
-			if (objects.count(mat))
-				continue;
-
-			int postfix_id = 0;
-			std::string mat_node_name = "Uber_" + std::to_string(postfix_id);
-
-			while (used_names.count(mat_node_name))
-			{
-				mat_node_name = "Uber_" + std::to_string(postfix_id);
 				++postfix_id;
 			}
 
@@ -589,14 +346,17 @@ void ExportMaterials(const std::string& filename,
 			CHECK_NO_ERROR(rprMaterialNodeGetInfo(node, RPR_MATERIAL_NODE_INPUT_COUNT, sizeof(size_t), &input_count, nullptr));
 			writer.startElement("node");
 			writer.writeAttribute("name", objects[node]);
-			writer.writeAttribute("type", kMaterialTypeNames.at(type));
+			std::string typeName;
+			g_rprStringMapper.RPRMaterialType_id_to_string(type,typeName);
+			writer.writeAttribute("type", typeName);
 
 			for (int input_id = 0; input_id < input_count; ++input_id)
 			{
 				size_t read_count = 0;
 				uint32_t id = 0;
 				CHECK_NO_ERROR(rprMaterialNodeGetInputInfo(node, input_id, RPR_MATERIAL_NODE_INPUT_NAME, sizeof(uint32_t), &id, nullptr));
-				std::string param_name = id2param[id];
+				std::string param_name;
+				g_rprStringMapper.RPRMaterialInput_id_to_string(id,param_name);
 
 				if (!exportImageUV  // if UV not exported
 					&& type == RPR_MATERIAL_NODE_IMAGE_TEXTURE
@@ -703,89 +463,6 @@ void ExportMaterials(const std::string& filename,
 				{
 					writer.startElement("param");
 					writer.writeAttribute("name", param_name.data());
-					writer.writeAttribute("type", type);
-					writer.writeAttribute("value", value);
-					writer.endElement();
-				}
-			}
-
-			writer.endElement();
-		}
-
-		for (const auto& iNode : nodeListX)
-		{
-			rprx_material materialX = iNode;
-
-			writer.startElement("node");
-			writer.writeAttribute("name", objects[materialX]);
-			writer.writeAttribute("type", "UBER");
-
-			for (int iParam = 0; iParam < rprxParamList.size(); iParam++)
-			{
-				std::string type = "";
-				std::string value = "";
-
-				rprx_parameter_type input_type = 0;
-				CHECK_NO_ERROR(rprxMaterialGetParameterType(contextX, materialX, rprxParamList[iParam].param, &input_type));
-
-				if (input_type == RPRX_PARAMETER_TYPE_FLOAT4)
-				{
-					rpr_float fvalue[4] = { 0.f, 0.f, 0.f, 0.f };
-					CHECK_NO_ERROR(rprxMaterialGetParameterValue(contextX, materialX, rprxParamList[iParam].param, &fvalue));
-
-					// fvalue converted to string
-					std::stringstream ss;
-					ss << fvalue[0] << ", " <<
-						fvalue[1] << ", " <<
-						fvalue[2] << ", " <<
-						fvalue[3];
-					type = "float4";
-					value = ss.str();
-				}
-				else if (input_type == RPRX_PARAMETER_TYPE_UINT)
-				{
-					rpr_int uivalue = RPR_SUCCESS;
-
-					CHECK_NO_ERROR(rprxMaterialGetParameterValue(contextX, materialX, rprxParamList[iParam].param, &uivalue));
-
-					// value converted to string
-					type = "uint";
-					value = std::to_string(uivalue);
-
-				}
-				else if (input_type == RPRX_PARAMETER_TYPE_NODE)
-				{
-					rpr_material_node connection = 0;
-					CHECK_NO_ERROR(rprxMaterialGetParameterValue(contextX, materialX, rprxParamList[iParam].param, &connection));
-
-					if (connection)
-					{
-						type = "connection";
-						if (!objects.count(connection) && connection)
-						{
-							throw std::runtime_error("input material node is missing");
-						}
-
-						const auto& connectName = objects.find(connection);
-						if (connectName != objects.end())
-						{
-							value = connectName->second;
-						}
-						else
-						{
-							// ERROR
-						}
-					}
-				}
-				else
-				{
-					throw std::runtime_error("unexpected material nodeX input type " + std::to_string(input_type));
-				}
-
-				if (!value.empty())
-				{
-					writer.startElement("param");
-					writer.writeAttribute("name", rprxParamList[iParam].nameInXML);
 					writer.writeAttribute("type", type);
 					writer.writeAttribute("value", value);
 					writer.endElement();
