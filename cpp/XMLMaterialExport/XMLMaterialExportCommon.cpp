@@ -5,7 +5,7 @@
 #include <ostream>
 #include <sstream>
 #include <iostream>
-#include <../RPRStringIDMapper.h>
+#include "RPRStringIDMapper.h"
 
 // execute FireRender func and check for an error
 #define CHECK_NO_ERROR(func)	{ \
