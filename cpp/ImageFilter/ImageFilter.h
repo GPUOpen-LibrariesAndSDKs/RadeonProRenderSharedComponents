@@ -71,7 +71,7 @@ public:
 	void DeleteFilter();
 
 	void AddInput(RifFilterInput inputId, const rpr_framebuffer rprFrameBuffer, float sigma) const;
-	void AddInput(RifFilterInput inputId, std::shared_ptr<float[]> memPtr, size_t size, float sigma) const;
+	void AddInput(RifFilterInput inputId, float* memPtr, size_t size, float sigma) const;
 	void AddParam(std::string name, RifParam param) const;
 
 	void AttachFilter() const;
@@ -171,10 +171,10 @@ struct RifInputGPUCPU : public RifInput
 
 struct RifInputCPU : public RifInput
 {
-	std::shared_ptr<float[]> mMemPtr;
+	float* mMemPtr = nullptr;
 	size_t mSize = 0;
 
-	RifInputCPU(rif_image rifImage, std::shared_ptr<float[]> memPtr, size_t size, float sigma);
+	RifInputCPU(rif_image rifImage, float* memPtr, size_t size, float sigma);
 	virtual ~RifInputCPU();
 	void Update() override;
 };
@@ -198,7 +198,7 @@ public:
 
 	void AddInput(RifFilterInput inputId, const rif_image rifImage, float sigma);
 	void AddInput(RifFilterInput inputId, const rif_image rifImage, const rpr_framebuffer rprFrameBuffer, float sigma);
-	void AddInput(RifFilterInput inputId, const rif_image rifImage, std::shared_ptr<float[]> memPtr, size_t size, float sigma);
+	void AddInput(RifFilterInput inputId, const rif_image rifImage, float* memPtr, size_t size, float sigma);
 	void AddParam(std::string name, RifParam param);
 
 	virtual void AttachFilter(const RifContextWrapper* rifContext) = 0;
