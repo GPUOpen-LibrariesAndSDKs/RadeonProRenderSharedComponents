@@ -128,7 +128,7 @@ void ImageFilter::AddInput(RifFilterInput inputId, const rpr_framebuffer rprFram
 	}
 }
 
-void ImageFilter::AddInput(RifFilterInput inputId, std::shared_ptr<float[]> memPtr, size_t size, float sigma) const
+void ImageFilter::AddInput(RifFilterInput inputId, float* memPtr, size_t size, float sigma) const
 {
 	rif_image_desc desc = { mWidth, mHeight, 0, 0, 0, 4, RIF_COMPONENT_TYPE_FLOAT32 };
 
@@ -537,7 +537,7 @@ void RifInputGPUCPU::Update()
 		throw std::runtime_error("RPR denoiser failed to unmap output data.");
 }
 
-RifInputCPU::RifInputCPU(rif_image rifImage, std::shared_ptr<float[]> memPtr, size_t size, float sigma) :
+RifInputCPU::RifInputCPU(rif_image rifImage, float* memPtr, size_t size, float sigma) :
 	RifInput(rifImage, sigma),
 	mMemPtr(memPtr),
 	mSize(size)
@@ -567,7 +567,7 @@ void RifInputCPU::Update()
 	rifStatus = rifImageMap(mRifImage, RIF_IMAGE_MAP_WRITE, &imageData);
 	assert(RIF_SUCCESS == rifStatus);
 
-	std::memcpy(imageData, mMemPtr.get(), mSize);
+	std::memcpy(imageData, mMemPtr, mSize);
 
 	rifStatus = rifImageUnmap(mRifImage, imageData);
 	assert(RIF_SUCCESS == rifStatus);
@@ -615,7 +615,7 @@ void RifFilterWrapper::AddInput(RifFilterInput inputId, const rif_image rifImage
 	mInputs[inputId] = input;
 }
 
-void RifFilterWrapper::AddInput(RifFilterInput inputId, const rif_image rifImage, std::shared_ptr<float[]> memPtr, size_t size, float sigma)
+void RifFilterWrapper::AddInput(RifFilterInput inputId, const rif_image rifImage, float* memPtr, size_t size, float sigma)
 {
 	RifInputPtr input = std::make_shared<RifInputCPU>(rifImage, memPtr, size, sigma);
 	mInputs[inputId] = input;
