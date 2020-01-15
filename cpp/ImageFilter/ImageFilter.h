@@ -8,6 +8,8 @@
 #include <memory>
 #include <string>
 
+
+
 enum class RifFilterType
 {
 	BilateralDenoise,
@@ -69,6 +71,7 @@ public:
 	void DeleteFilter();
 
 	void AddInput(RifFilterInput inputId, const rpr_framebuffer rprFrameBuffer, float sigma) const;
+	void AddInput(RifFilterInput inputId, float* memPtr, size_t size, float sigma) const;
 	void AddParam(std::string name, RifParam param) const;
 
 	void AttachFilter() const;
@@ -97,7 +100,7 @@ public:
 	void CreateOutput(const rif_image_desc& desc);
 
 	virtual rif_image CreateRifImage(const rpr_framebuffer rprFrameBuffer, const rif_image_desc& desc) const = 0;
-	virtual void UpdateInputs(const RifFilterWrapper* rifFilter) const = 0;
+	void UpdateInputs(const RifFilterWrapper* rifFilter) const;
 
 protected:
 	virtual std::vector<rpr_char> GetRprCachePath(rpr_context rprContext) const final;
@@ -112,7 +115,6 @@ public:
 	virtual ~RifContextGPU();
 
 	virtual rif_image CreateRifImage(const rpr_framebuffer rprFrameBuffer, const rif_image_desc& desc) const override;
-	virtual void UpdateInputs(const RifFilterWrapper* rifFilter) const override;
 };
 
 class RifContextGPUMetal final : public RifContextWrapper
@@ -124,7 +126,6 @@ public:
 	virtual ~RifContextGPUMetal();
     
 	virtual rif_image CreateRifImage(const rpr_framebuffer rprFrameBuffer, const rif_image_desc& desc) const override;
-	virtual void UpdateInputs(const RifFilterWrapper* rifFilter) const override;
 };
 
 class RifContextCPU final : public RifContextWrapper
@@ -136,10 +137,47 @@ public:
 	virtual ~RifContextCPU();
 
 	virtual rif_image CreateRifImage(const rpr_framebuffer rprFrameBuffer, const rif_image_desc& desc) const override;
-	virtual void UpdateInputs(const RifFilterWrapper* rifFilter) const override;
 };
 
 
+
+struct RifInput
+{
+	rif_image mRifImage = nullptr;
+	float     mSigma = 0.0f;
+
+	RifInput::RifInput(rif_image rifImage, float sigma);
+	virtual ~RifInput();
+	virtual void Update() = 0;
+};
+
+using RifInputPtr = std::shared_ptr<RifInput>;
+
+struct RifInputGPU : public RifInput
+{
+	RifInputGPU(rif_image rifImage, float sigma);
+	virtual ~RifInputGPU();
+	void Update() override;
+};
+
+struct RifInputGPUCPU : public RifInput
+{
+	rpr_framebuffer mRprFrameBuffer = nullptr;
+
+	RifInputGPUCPU(rif_image rifImage, const rpr_framebuffer rprFrameBuffer, float sigma);
+	virtual ~RifInputGPUCPU();
+	void Update() override;
+};
+
+struct RifInputCPU : public RifInput
+{
+	float* mMemPtr = nullptr;
+	size_t mSize = 0;
+
+	RifInputCPU(rif_image rifImage, float* memPtr, size_t size, float sigma);
+	virtual ~RifInputCPU();
+	void Update() override;
+};
 
 class RifFilterWrapper
 {
@@ -152,20 +190,15 @@ protected:
 	std::vector<rif_image_filter> mAuxFilters;
 	std::vector<rif_image> mAuxImages;
 
-	struct InputTraits
-	{
-		rif_image       mRifImage;
-		rpr_framebuffer mRprFrameBuffer;
-		float           mSigma;
-	};
-
-	std::unordered_map<RifFilterInput, InputTraits> mInputs;
+	std::unordered_map<RifFilterInput, RifInputPtr> mInputs;
 	std::unordered_map<std::string, RifParam> mParams;
 
 public:
 	virtual ~RifFilterWrapper();
 
+	void AddInput(RifFilterInput inputId, const rif_image rifImage, float sigma);
 	void AddInput(RifFilterInput inputId, const rif_image rifImage, const rpr_framebuffer rprFrameBuffer, float sigma);
+	void AddInput(RifFilterInput inputId, const rif_image rifImage, float* memPtr, size_t size, float sigma);
 	void AddParam(std::string name, RifParam param);
 
 	virtual void AttachFilter(const RifContextWrapper* rifContext) = 0;
