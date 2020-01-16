@@ -1,5 +1,7 @@
 #include "Utils.h"
 
+#include <codecvt>
+
 namespace SharedComponentsUtils
 {
 std::wstring s2ws(const std::string& str)
