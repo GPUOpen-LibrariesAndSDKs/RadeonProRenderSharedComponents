@@ -19,7 +19,9 @@
 #include <clocale>
 #include <cmath>
 #include <float.h>
+
 #include "IESprocessor.h"
+#include "../Utils/Utils.h"
 
 // according to ies file specification this tag is supposed to be in all IES files
 // this is not true however for many existing and otherwise valid files so we don't check this flag
@@ -194,7 +196,7 @@ void IESProcessor::SplitLine(std::vector<std::string>& tokens, const std::string
 
 	do
 	{
-		const char delimiters[] = {' ', ',', ';', '\t', '\n', '\0' };
+		const char delimiters[] = {' ', ',', ';', '\t', '\n', '\r', '\0' };
 		pos = lineToParse.find_first_of(delimiters, prev);
 
 		if (pos > prev)
@@ -581,10 +583,6 @@ IESProcessor::ErrorCode IESProcessor::ParseTokens(IESLightData& lightData, std::
 
 IESProcessor::ErrorCode IESProcessor::Parse(IESLightData& lightData, const wchar_t* filename) const
 {
-#if defined(OSMac_)
-	// Todo : std::ifstream does not take a wchar_t filename on OSX
-	return IESProcessor::ErrorCode::NO_FILE;
-#else
 	// back-off
 	if (filename == nullptr)
 	{
@@ -592,7 +590,12 @@ IESProcessor::ErrorCode IESProcessor::Parse(IESLightData& lightData, const wchar
 	}
 
 	// try open file
+
+#if defined(OSMac_)
+	std::ifstream inputFile(SharedComponentsUtils::ws2s(filename));
+#else
 	std::ifstream inputFile(filename);
+#endif
 	if (!inputFile)
 	{
 		return IESProcessor::ErrorCode::FAILED_TO_READ_FILE;
@@ -641,7 +644,6 @@ IESProcessor::ErrorCode IESProcessor::Parse(IESLightData& lightData, const wchar
 
 	// parse successfull!
 	return IESProcessor::ErrorCode::SUCCESS;
-#endif
 }
 
 IESProcessor::ErrorCode IESProcessor::Update(IESLightData& lightData, const IESUpdateRequest& req) const
