@@ -196,7 +196,7 @@ void IESProcessor::SplitLine(std::vector<std::string>& tokens, const std::string
 
 	do
 	{
-		const char delimiters[] = {' ', ',', ';', '\t', '\n', '\0' };
+		const char delimiters[] = {' ', ',', ';', '\t', '\n', '\r', '\0' };
 		pos = lineToParse.find_first_of(delimiters, prev);
 
 		if (pos > prev)
