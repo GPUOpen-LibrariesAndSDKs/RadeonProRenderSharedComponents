@@ -1,6 +1,7 @@
 #include "Utils.h"
 
 #include <codecvt>
+#include <locale>
 
 namespace SharedComponentsUtils
 {
