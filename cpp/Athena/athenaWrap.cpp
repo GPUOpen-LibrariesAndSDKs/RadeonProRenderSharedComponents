@@ -130,7 +130,7 @@ AthenaStatus athenaFileWrite(AthenaFilePtr& pJson, const wchar_t* filePath)
 	std::ofstream o(filePath);
 #else
 	// thus different path for xcode is needed
-	std::string s_filePath = ws2s(filePath);
+    std::string s_filePath = SharedComponentsUtils::ws2s(filePath);
 	std::ofstream o(s_filePath);
 #endif
 
@@ -218,7 +218,7 @@ bool AthenaWrapper::AthenaSendFile(std::function<int(std::string)>& actionFunc)
 #ifdef WIN32
 	bool folderCreated = std::experimental::filesystem::create_directory(m_folderPath);
 #else
-    std::string s_folderPath = ws2s(m_folderPath);
+    std::string s_folderPath = SharedComponentsUtils::ws2s(m_folderPath);
 	bool folderCreated = (mkdir(s_folderPath.c_str(), 0777) != -1);
 #endif
 
