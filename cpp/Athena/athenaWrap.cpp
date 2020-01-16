@@ -1,5 +1,6 @@
 #include "athenaWrap.h"
-#include <codecvt>
+#include "../Utils/Utils.h"
+
 #include <string>
 #include <fstream>
 #include <algorithm>
@@ -16,9 +17,6 @@
 #include <chrono>
 #include <time.h>
 #include <thread>
-
-std::wstring s2ws(const std::string& str);
-std::string ws2s(const std::wstring& wstr);
 
 AthenaWrapper* AthenaWrapper::GetAthenaWrapper(void)
 {
@@ -39,7 +37,7 @@ AthenaWrapper::AthenaWrapper()
 #else
     std::string temp(getenv("TMPDIR"));
 #endif
-	m_folderPath = s2ws(temp);
+	m_folderPath = SharedComponentsUtils::s2ws(temp);
 #ifdef WIN32
 	m_folderPath += L"\\rprathena";
 #else
@@ -83,7 +81,7 @@ std::wstring athenaUniqueFilename(const char* guidstr)
 	}
 
 	std::wstring uniquename;
-	uniquename = s2ws(guidstr);
+	uniquename = SharedComponentsUtils::s2ws(guidstr);
 	uniquename += L"_";
 
 	std::wostringstream stream;
@@ -132,7 +130,7 @@ AthenaStatus athenaFileWrite(AthenaFilePtr& pJson, const wchar_t* filePath)
 	std::ofstream o(filePath);
 #else
 	// thus different path for xcode is needed
-	std::string s_filePath = ws2s(filePath);
+    std::string s_filePath = SharedComponentsUtils::ws2s(filePath);
 	std::ofstream o(s_filePath);
 #endif
 
@@ -165,8 +163,8 @@ AthenaStatus athenaUpload(std::wstring& sendFile, wchar_t* fileExtension, std::w
 
 	AthenaStatus successFlag = kSuccess;
 
-	std::string str_sendFile = ws2s(sendFile);
-	std::string str_filename = ws2s(filename);
+	std::string str_sendFile = SharedComponentsUtils::ws2s(sendFile);
+	std::string str_filename = SharedComponentsUtils::ws2s(filename);
 
 	strPrepareForPython(str_sendFile);
 	strPrepareForPython(str_filename);
@@ -220,7 +218,7 @@ bool AthenaWrapper::AthenaSendFile(std::function<int(std::string)>& actionFunc)
 #ifdef WIN32
 	bool folderCreated = std::experimental::filesystem::create_directory(m_folderPath);
 #else
-    std::string s_folderPath = ws2s(m_folderPath);
+    std::string s_folderPath = SharedComponentsUtils::ws2s(m_folderPath);
 	bool folderCreated = (mkdir(s_folderPath.c_str(), 0777) != -1);
 #endif
 
@@ -257,22 +255,3 @@ bool AthenaWrapper::AthenaSendFile(std::function<int(std::string)>& actionFunc)
 
 	return true;
 }
-
-std::wstring s2ws(const std::string& str)
-{
-	using convert_typeX = std::codecvt_utf8<wchar_t>;
-
-	std::wstring_convert<convert_typeX, wchar_t> converterX;
-
-	return converterX.from_bytes(str);
-}
-
-std::string ws2s(const std::wstring& wstr)
-{
-	using convert_typeX = std::codecvt_utf8<wchar_t>;
-
-	std::wstring_convert<convert_typeX, wchar_t> converterX;
-
-	return converterX.to_bytes(wstr);
-}
-

@@ -146,7 +146,7 @@ struct RifInput
 	rif_image mRifImage = nullptr;
 	float     mSigma = 0.0f;
 
-	RifInput::RifInput(rif_image rifImage, float sigma);
+	RifInput(rif_image rifImage, float sigma);
 	virtual ~RifInput();
 	virtual void Update() = 0;
 };
