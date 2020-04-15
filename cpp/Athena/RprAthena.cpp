@@ -73,11 +73,6 @@ std::string _ws2s(const std::wstring& wstr)
 //		Bucket Name : "amd - athena - prorender"
 //		Code snippet : "//depot/stg/ppc/apps/ppc/Source/AMDPPC/AMDPPCMaster/AMDPPCDU.cpp::UploadS3()"
 //
-//	Software developer helping me:
-//		ManoharReddy Pallela <ManoharReddy.Pallela@amd.com>
-//
-//	To verify your upload is working:
-//		After upload please send details to Jagadeeshyadav.Paga@amd.com. He will confirm about the uploads.
 //
 //	There is no specific format.  It is based on client need.  Filename should be unique across 
 //	the globe.  If file name is duplicate it can be overwritten at AWS.
