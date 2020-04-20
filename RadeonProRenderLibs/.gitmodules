@@ -1,0 +1,3 @@
+[submodule "contrib/RadeonProRenderSDK"]
+	path = contrib/RadeonProRenderSDK
+	url = https://github.com/radeon-pro/RadeonProRenderSDK
