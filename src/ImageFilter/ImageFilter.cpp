@@ -87,7 +87,10 @@ ImageFilter::ImageFilter(const rpr_context rprContext, std::uint32_t width, std:
 
 ImageFilter::~ImageFilter()
 {
-	mRifFilter->DetachFilter( mRifContext.get() );
+	if (mRifFilter != nullptr)
+	{
+		mRifFilter->DetachFilter( mRifContext.get() );
+	}
 }
 
 void ImageFilter::CreateFilter(RifFilterType rifFilteType, bool useOpenImageDenoise)
@@ -121,7 +124,10 @@ void ImageFilter::CreateFilter(RifFilterType rifFilteType, bool useOpenImageDeno
 
 void ImageFilter::DeleteFilter()
 {
-	mRifFilter->DetachFilter( mRifContext.get() );
+	if (mRifFilter != nullptr)
+	{
+		mRifFilter->DetachFilter( mRifContext.get() );
+	}
 }
 
 void ImageFilter::AddInput(RifFilterInput inputId, const rpr_framebuffer rprFrameBuffer, float sigma) const
