@@ -15,6 +15,7 @@ limitations under the License.
 #include "RadeonProRender_CL.h"
 #include "RadeonImageFilters_cl.h"
 #include "RadeonImageFilters_metal.h"
+#include "RadeonProRender_Metal.h"
 
 #include <vector>
 #include <cassert>
@@ -421,11 +422,24 @@ RifContextGPUMetal::RifContextGPUMetal(const rpr_context rprContext)
 	rpr_creation_flags contextFlags = 0;
 	rpr_int rprStatus = rprContextGetInfo(rprContext, RPR_CONTEXT_CREATION_FLAGS, sizeof(rpr_creation_flags), &contextFlags, nullptr);
 	assert(RPR_SUCCESS == rprStatus);
+    
+    
+    rpr_metal_device pMetalDevice = nullptr;
+    rpr_metal_command_queue pMetalCommandQueue = nullptr;
+    
+    rprStatus = rprContextGetInfo(rprContext, RPR_METAL_DEVICE, sizeof(rpr_metal_device), &pMetalDevice, nullptr);
+    assert(RIF_SUCCESS == rifStatus);
+    assert(pMetalDevice != nullptr);
 
+    rprStatus = rprContextGetInfo(rprContext, RPR_METAL_COMMAND_QUEUE, sizeof(rpr_metal_command_queue), &pMetalCommandQueue, nullptr);
+    assert(RIF_SUCCESS == rifStatus);
+    assert(pMetalCommandQueue != nullptr);
+    
+    
 	std::vector<rpr_char> path = GetRprCachePath(rprContext);
 
-	// we find the active gpu from the rpr contextFlags and then use that to create the rif context
-	rifStatus = rifCreateContext(RIF_API_VERSION, rifBackendApiType, GpuDeviceIdUsed(contextFlags), path.data(), &mRifContextHandle);
+    rifStatus = rifCreateContextFromMetalContext(RIF_API_VERSION, pMetalDevice, pMetalCommandQueue, path.data(), &mRifContextHandle);
+    
 	assert(RIF_SUCCESS == rifStatus);
 
 	if (RIF_SUCCESS != rifStatus)

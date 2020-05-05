@@ -142,7 +142,11 @@ public:
 
 class RifContextCPU final : public RifContextWrapper
 {
-	const rif_backend_api_type rifBackendApiType = RIF_BACKEND_API_OPENCL;
+#ifdef __APPLE__
+	const rif_backend_api_type rifBackendApiType = RIF_BACKEND_API_METAL;
+#else
+    const rif_backend_api_type rifBackendApiType = RIF_BACKEND_API_OPENCL;
+#endif
 
 public:
 	explicit RifContextCPU(const rpr_context rprContext);
