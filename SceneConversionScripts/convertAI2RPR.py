@@ -9,7 +9,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 # Arnold to RadeonProRender Converter
 
 import maya.mel as mel
@@ -19,6 +18,7 @@ import os
 import math
 import traceback
 
+ARNOLD2RPR_CONVERTER_VERSION = "2.8.7"
 
 # log functions
 
@@ -339,8 +339,8 @@ def convertDisplacement(ai_sg, rpr_name):
 				if displacement_file:
 					setProperty(rpr_name, "displacementEnable", 1)
 					connectProperty(displacement_file[0], "outColor", rpr_name, "displacementMap")
-					copyProperty(rpr_name, displacement[0], "scale", "displacementMax")
-					copyProperty(rpr_name, displacement[0], "displacementMin", "aiDisplacementZeroValue")
+					setProperty(rpr_name, "displacementMax", getProperty(displacement[0], "scale") * 0.01)
+					setProperty(rpr_name, "displacementMin", 0)
 
 			elif displacementType == "file":
 				setProperty(rpr_name, "displacementEnable", 1)
@@ -350,14 +350,8 @@ def convertDisplacement(ai_sg, rpr_name):
 				if meshs:
 					shapes = cmds.listRelatives(meshs[0], type="mesh")
 					copyProperty(rpr_name, shapes[0], "displacementSubdiv", "aiSubdivIterations")
-					displacementMax = getProperty(shapes[0], 'aiDispHeight')
-					displacementMin = getProperty(shapes[0], 'aiDispZeroValue')
-					if displacementMin > displacementMax:
-						copyProperty(rpr_name, shapes[0], "displacementMax", "aiDispHeight")
-						copyProperty(rpr_name, shapes[0], "displacementMin", "aiDispHeight")
-					else:
-						copyProperty(rpr_name, shapes[0], "displacementMax", "aiDispHeight")
-						copyProperty(rpr_name, shapes[0], "displacementMin", "aiDispZeroValue")
+					copyProperty(rpr_name, shapes[0], "displacementMax", "aiDispHeight")
+					setProperty(rpr_name, "displacementMin", 0)
 
 	except Exception as ex:
 		traceback.print_exc()
@@ -2303,9 +2297,12 @@ def convertaiStandardSurface(aiMaterial, source):
 			setProperty(rprMaterial, "multipleScattering", 0)
 			setProperty(rprMaterial, "backscatteringWeight", 0.75)
 
-			if getProperty(aiMaterial, "subsurfaceType") == 0: # diffusion type
+			subsurfaceType = getProperty(aiMaterial, "subsurfaceType")
+			if subsurfaceType == 0: # diffusion type
 				copyProperty(rprMaterial, aiMaterial, "diffuseColor", "subsurfaceColor")
 				setProperty(rprMaterial, "backscatteringWeight", 0.125)
+			elif subsurfaceType == 1: # randomwalk
+				setProperty(rprMaterial, "backscatteringWeight", 0.05)
 			
 		copyProperty(rprMaterial, aiMaterial, "coatColor", "coatColor")
 		copyProperty(rprMaterial, aiMaterial, "coatTransmissionColor", "coatColor")
@@ -2313,7 +2310,7 @@ def convertaiStandardSurface(aiMaterial, source):
 		copyProperty(rprMaterial, aiMaterial, "coatRoughness", "coatRoughness")
 		copyProperty(rprMaterial, aiMaterial, "coatIor", "coatIOR")
 		copyProperty(rprMaterial, aiMaterial, "coatNormal", "coatNormal")
-		setProperty(rprMaterial, "coatThickness", 1.5)
+		setProperty(rprMaterial, "coatThickness", 0)
 
 		copyProperty(rprMaterial, aiMaterial, "emissiveColor", "emissionColor")
 		setProperty(rprMaterial, "emissiveWeight", 0.35)
@@ -3274,7 +3271,8 @@ def cleanScene():
 		if isArnoldType(material):
 			shEng = cmds.listConnections(material, type="shadingEngine")
 			try:
-				cmds.delete(shEng[0])
+				if shEng:
+					cmds.delete(shEng[0])
 				cmds.delete(material)
 			except:
 				pass
@@ -3493,7 +3491,7 @@ def auto_launch():
 	cleanScene()
 
 def manual_launch():
-	print("Convertion start!")
+	print("Conversion start! Converter version: {}".format(ARNOLD2RPR_CONVERTER_VERSION))
 	startTime = 0
 	testTime = 0
 	startTime = time.time()
