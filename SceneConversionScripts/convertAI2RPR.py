@@ -11,16 +11,15 @@
 
 # Arnold to RadeonProRender Converter
 
-import maya.mel as mel
-import maya.cmds as cmds
 import time
 import os
 import math
 import traceback
 
-from maya.plugin.evaluator.cache_preferences import CachePreferenceEnabled
+import maya.mel as mel
+import maya.cmds as cmds
 
-ARNOLD2RPR_CONVERTER_VERSION = "2.9.2"
+ARNOLD2RPR_CONVERTER_VERSION = "2.9.3"
 
 # log functions
 
@@ -3350,6 +3349,7 @@ def convertScene():
 	# Disable caching
 	maya_version = cmds.about(apiVersion=True)
 	if maya_version > 20190200:
+		from maya.plugin.evaluator.cache_preferences import CachePreferenceEnabled
 		cache_preference_enabled = CachePreferenceEnabled().get_value()
 		if cache_preference_enabled:
 			CachePreferenceEnabled().set_value(False)
