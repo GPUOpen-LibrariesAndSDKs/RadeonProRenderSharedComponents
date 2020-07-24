@@ -350,7 +350,7 @@ rif_image RifContextGPU::CreateRifImage(const rpr_framebuffer rprFrameBuffer, co
 	if (RPR_SUCCESS != rprStatus)
 		throw std::runtime_error("RPR denoiser failed to get frame buffer info.");
 
-	rif_int rifStatus = rifContextCreateImageFromOpenClMemory(mRifContextHandle , &desc, clMem, false, &rifImage);
+	rif_int rifStatus = rifContextCreateImageFromOpenClMemory(mRifContextHandle , &desc, clMem, &rifImage);
 	assert(RIF_SUCCESS == rifStatus);
 
 	if (RIF_SUCCESS != rifStatus)
@@ -411,6 +411,7 @@ rif_image RifContextCPU::CreateRifImage(const rpr_framebuffer rprFrameBuffer, co
 
 RifContextGPUMetal::RifContextGPUMetal(const rpr_context rprContext)
 {
+#ifdef __APPLE__
 	int deviceCount = 0;
 	rif_int rifStatus = rifGetDeviceCount(rifBackendApiType, &deviceCount);
 	assert(RIF_SUCCESS == rifStatus);
@@ -450,6 +451,7 @@ RifContextGPUMetal::RifContextGPUMetal(const rpr_context rprContext)
 
 	if (RIF_SUCCESS != rifStatus)
 		throw std::runtime_error("RPR denoiser failed to create RIF command queue.");
+#endif
 }
 
 RifContextGPUMetal::~RifContextGPUMetal()
