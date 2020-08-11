@@ -19,7 +19,7 @@ limitations under the License.
 #include <unordered_map>
 #include <memory>
 #include <string>
-
+#include <array>
 
 
 enum class RifFilterType
@@ -28,7 +28,11 @@ enum class RifFilterType
 	LwrDenoise,
 	EawDenoise,
 	MlDenoise,
-	MlDenoiseColorOnly
+	MlDenoiseColorOnly,
+
+	ShadowCatcher,
+	ReflectionCatcher,
+	ShadowReflectionCatcher,
 };
 
 enum RifFilterInput
@@ -40,13 +44,18 @@ enum RifFilterInput
 	RifObjectId,
 	RifTrans,
 	RifAlbedo,
+	RifOpacity,
+	RifBackground,
+	RifShadowCatcher,
+	RifReflectionCatcher,
 	RifMaxInput
 };
 
 enum class RifParamType
 {
 	RifInt,
-	RifFloat
+	RifFloat,
+	RifOther  //param not applied to filter
 };
 
 union RifData
@@ -59,6 +68,12 @@ struct RifParam
 {
 	RifParamType mType;
 	RifData      mData;
+
+	operator rif_float() const { return mData.f; }
+
+	RifParam() {}
+	RifParam(RifParamType type, rif_float data) : mType(type), mData() { mData.f = data; }
+	RifParam(RifParamType type, rif_int data) : mType(type), mData() { mData.i = data; }
 };
 
 class RifContextWrapper;
@@ -334,3 +349,107 @@ public:
 
 	virtual void AttachFilter(const RifContextWrapper* rifContext) override;
 };
+
+class RifSCInternal
+{
+protected:
+	rif_image_filter m_pFilter;
+	std::vector<std::shared_ptr<RifSCInternal>> m_connections;
+
+public:
+	RifSCInternal(rif_context context, rif_image_filter_type type);
+	~RifSCInternal(void);
+	operator rif_image_filter(void) const;
+
+	void SetInput4f(const char *inputName, float r, float g, float b, float a);
+	void SetInputImage(const char *inputName, rif_image input);
+
+	void SaveDependency(const std::shared_ptr<RifSCInternal>& fromTemporary);
+};
+
+class RifSCWrapper
+{
+protected:
+	std::shared_ptr<RifSCInternal> m_filter;
+	rif_context m_pContext;
+
+	enum
+	{
+		RIF_ADD,
+		RIF_SUBTRACT,
+		RIF_MULTIPLY,
+		RIF_MIN,
+		INPUT,
+		UNDEFINED,
+	};
+
+	enum
+	{
+		IMAGE,
+		FLOAT,
+		FILTER,
+		NOT_SET,
+	} m_inputType;
+
+	std::array<float, 4> m_inputValues;
+	rif_image m_inputImage;
+
+public:
+	RifSCWrapper();
+	RifSCWrapper(const rif_context pRifContext, const rif_image pInputImage);
+	RifSCWrapper(const rif_context pRifContext, float x);
+	RifSCWrapper(const rif_context pRifContext, float x, float y, float z, float w);
+	RifSCWrapper(const RifSCWrapper& other);
+	RifSCWrapper& operator=(const RifSCWrapper& other);
+
+	friend RifSCWrapper operator+ (const RifSCWrapper& w1, const RifSCWrapper& w2);
+	friend RifSCWrapper operator* (const RifSCWrapper& w1, const RifSCWrapper& w2);
+	friend RifSCWrapper operator- (const RifSCWrapper& w1, const RifSCWrapper& w2);
+	static RifSCWrapper min(const RifSCWrapper& w1, const RifSCWrapper& w2);
+
+	const RifSCInternal& GetInternalFilter(void);
+
+protected:
+	RifSCWrapper(const rif_context pRifContext, int operation);
+
+	static void SetInputs(RifSCInternal& filter, const RifSCWrapper& w1, const RifSCWrapper& w2);
+};
+
+class RifFilterShadowCatcher final : public RifFilterWrapper
+{
+	RifSCWrapper m_res;
+
+public:
+	explicit RifFilterShadowCatcher(const RifContextWrapper* rifContext, std::uint32_t width, std::uint32_t height,
+		const std::string& modelsPath, bool useOpenImageDenoise);
+	virtual ~RifFilterShadowCatcher();
+
+	virtual void AttachFilter(const RifContextWrapper* rifContext) override;
+};
+
+class RifFilterReflectionCatcher final : public RifFilterWrapper
+{
+	RifSCWrapper m_res;
+
+public:
+	explicit RifFilterReflectionCatcher(const RifContextWrapper* rifContext, std::uint32_t width, std::uint32_t height,
+		const std::string& modelsPath, bool useOpenImageDenoise);
+	virtual ~RifFilterReflectionCatcher();
+
+	virtual void AttachFilter(const RifContextWrapper* rifContext) override;
+};
+
+
+class RifFilterShadowReflectionCatcher final : public RifFilterWrapper
+{
+	RifSCWrapper m_res;
+
+public:
+	explicit RifFilterShadowReflectionCatcher(const RifContextWrapper* rifContext, std::uint32_t width, std::uint32_t height,
+		const std::string& modelsPath, bool useOpenImageDenoise);
+	virtual ~RifFilterShadowReflectionCatcher();
+
+	virtual void AttachFilter(const RifContextWrapper* rifContext) override;
+};
+
+
