@@ -118,6 +118,18 @@ void ImageFilter::CreateFilter(RifFilterType rifFilteType, bool useOpenImageDeno
 		mRifFilter.reset(new RifFilterMlColorOnly(mRifContext.get(), mWidth, mHeight, mModelsPath, useOpenImageDenoise));
 		break;
 
+	case RifFilterType::ShadowCatcher:
+		mRifFilter.reset(new RifFilterShadowCatcher(mRifContext.get(), mWidth, mHeight, mModelsPath, useOpenImageDenoise));
+		break;
+
+	case RifFilterType::ReflectionCatcher:
+		mRifFilter.reset(new RifFilterReflectionCatcher(mRifContext.get(), mWidth, mHeight, mModelsPath, useOpenImageDenoise));
+		break;
+
+	case RifFilterType::ShadowReflectionCatcher:
+		mRifFilter.reset(new RifFilterShadowReflectionCatcher(mRifContext.get(), mWidth, mHeight, mModelsPath, useOpenImageDenoise));
+		break;
+
 	default:
 		assert("Unknown filter type");
 	}
@@ -439,7 +451,7 @@ RifContextGPUMetal::RifContextGPUMetal(const rpr_context rprContext)
     
 	std::vector<rpr_char> path = GetRprCachePath(rprContext);
 
-    rifStatus = rifCreateContextFromMetalContext(RIF_API_VERSION, pMetalDevice, pMetalCommandQueue, path.data(), &mRifContextHandle);
+	rifStatus = rifCreateContextFromMetalContext(RIF_API_VERSION, pMetalDevice, pMetalCommandQueue, path.data(), &mRifContextHandle);
     
 	assert(RIF_SUCCESS == rifStatus);
 
@@ -715,6 +727,9 @@ void RifFilterWrapper::ApplyParameters() const
 
 		case RifParamType::RifFloat:
 			rifStatus = rifImageFilterSetParameter1f(mRifImageFilterHandle, param.first.c_str(), param.second.mData.f);
+			break;
+
+		case RifParamType::RifOther: // don't apply such parameter to image filter
 			break;
 		}
 
@@ -1317,3 +1332,362 @@ void RifFilterMlColorOnly::AttachFilter(const RifContextWrapper* rifContext)
 	if (RIF_SUCCESS != rifStatus)
 		throw std::runtime_error("RPR denoiser failed to attach resampler filter to queue.");
 }
+
+RifSCInternal::RifSCInternal(rif_context context, rif_image_filter_type type)
+	: m_pFilter(nullptr)
+	, m_connections()
+{
+	rif_int res = rifContextCreateImageFilter(context, type, &m_pFilter); 
+	assert(RIF_SUCCESS == res);
+
+	if (RIF_SUCCESS != res)
+		throw std::runtime_error("RPR denoiser failed to create auxillary filter.");
+}
+
+RifSCInternal::~RifSCInternal()
+{
+	if (!m_pFilter)
+		return;
+
+	rif_int res = rifObjectDelete(m_pFilter);
+	assert(RIF_SUCCESS == res);
+}
+
+RifSCInternal::operator rif_image_filter() const
+{
+	return m_pFilter;
+}
+
+void RifSCInternal::SetInput4f(const char *inputName, float r, float g, float b, float a)
+{
+	assert(nullptr != m_pFilter);
+	assert(nullptr != inputName);
+
+	if (!m_pFilter || !inputName)
+		return;
+
+	rif_int res = rifImageFilterSetParameter4f(m_pFilter, inputName, r, g, b, a);
+	assert(RIF_SUCCESS == res);
+}
+
+void RifSCInternal::SetInputImage(const char *inputName, rif_image input)
+{
+	assert(nullptr != m_pFilter);
+	assert(nullptr != inputName);
+
+	if (!m_pFilter || !inputName)
+		return;
+
+	rif_int res = rifImageFilterSetParameterImage(m_pFilter, inputName, input);
+	assert(RIF_SUCCESS == res);
+}
+
+void RifSCInternal::SaveDependency(const std::shared_ptr<RifSCInternal>& fromTemporary)
+{
+	m_connections.emplace_back();
+	m_connections.back() = fromTemporary;
+}
+
+RifSCWrapper::RifSCWrapper()
+{
+	// this is dummy constructor for empty wrapper initialization
+	// such instance is expected to be replaced by ibject create proper way
+}
+
+RifSCWrapper::RifSCWrapper(const rif_context pRifContext, const rif_image pInputImage)
+	: m_inputType(IMAGE)
+	, m_inputImage(pInputImage)
+	, m_inputValues()
+	, m_pContext(pRifContext)
+	, m_filter()
+{
+	// NOTICE we should create filter ONLY after 2 inputs AND operation are set
+	// however we can set only one input for the wrapper dirrectly;
+	// filter is supposed to be created by arithmetic operations!
+}
+
+RifSCWrapper::RifSCWrapper(const rif_context pRifContext, float x, float y, float z, float w)
+	: m_inputType(FLOAT)
+	, m_inputImage(nullptr)
+	, m_inputValues({ x, y, z, w })
+	, m_pContext(pRifContext)
+	, m_filter()
+{
+	// NOTICE we should create filter ONLY after 2 inputs AND operation are set
+	// however we can set only one input for the wrapper dirrectly;
+	// filter is supposed to be created by arithmetic operations!
+}
+
+RifSCWrapper::RifSCWrapper(const rif_context pRifContext, float x)
+	: m_inputType(FLOAT)
+	, m_inputImage(nullptr)
+	, m_inputValues({ x, x, x, x })
+	, m_pContext(pRifContext)
+	, m_filter()
+{
+	// NOTICE we should create filter ONLY after 2 inputs AND operation are set
+	// however we can set only one input for the wrapper dirrectly;
+	// filter is supposed to be created by arithmetic operations!
+}
+
+RifSCWrapper::RifSCWrapper(const rif_context pRifContext, int operation)
+	: m_pContext(pRifContext)
+	, m_inputType(NOT_SET)
+	, m_inputImage(nullptr)
+	, m_inputValues()
+	, m_filter(std::make_shared<RifSCInternal>(pRifContext, operation))
+{
+}
+
+RifSCWrapper::RifSCWrapper(const RifSCWrapper& other)
+	: m_inputType(other.m_inputType)
+	, m_inputImage(other.m_inputImage)
+	, m_inputValues(other.m_inputValues)
+	, m_pContext(other.m_pContext)
+	, m_filter(other.m_filter)
+{}
+
+RifSCWrapper& RifSCWrapper::operator=(const RifSCWrapper& other)
+{
+	// self-assignment
+	if (this == &other)
+		return *this;
+
+	this->m_inputType = other.m_inputType;
+	this->m_inputImage = other.m_inputImage;
+	this->m_inputValues = other.m_inputValues;
+	this->m_pContext = other.m_pContext;
+	this->m_filter = other.m_filter;
+
+	return *this;
+}
+
+void RifSCWrapper::SetInputs(RifSCInternal& filter, const RifSCWrapper& w1, const RifSCWrapper& w2)
+{
+	// determine names of inputs
+	if (w1.m_inputType == RifSCWrapper::FLOAT)
+	{
+		char* lhs_input_name = "lhsVec";
+		filter.SetInput4f(lhs_input_name, w1.m_inputValues[0], w1.m_inputValues[1], w1.m_inputValues[2], w1.m_inputValues[3]);
+	}
+	else // image or filter
+	{
+		char* lhs_input_name = "lhsImg";
+		filter.SetInputImage(lhs_input_name, w1.m_inputImage);
+	}
+
+	if (w2.m_inputType == RifSCWrapper::FLOAT)
+	{
+		char* rhs_input_name = "rhsVec";
+		filter.SetInput4f(rhs_input_name, w2.m_inputValues[0], w2.m_inputValues[1], w2.m_inputValues[2], w2.m_inputValues[3]);
+	}
+	else // image or filter
+	{
+		char* rhs_input_name = "rhsImg";
+		filter.SetInputImage(rhs_input_name, w2.m_inputImage);
+	}
+}
+
+RifSCWrapper operator+ (const RifSCWrapper& w1, const RifSCWrapper& w2)
+{
+	assert(w1.m_inputType != RifSCWrapper::NOT_SET);
+	assert(w2.m_inputType != RifSCWrapper::NOT_SET);
+
+	int operation = RIF_IMAGE_FILTER_ADD;
+	RifSCWrapper filterWrapper(w1.m_pContext, operation);
+	RifSCInternal& filter = *filterWrapper.m_filter;
+	RifSCWrapper::SetInputs(filter, w1, w2);
+	filterWrapper.m_inputType = RifSCWrapper::FILTER;
+	filterWrapper.m_inputImage = (rif_image)(rif_image_filter)filter;
+
+	filter.SaveDependency(w1.m_filter);
+	filter.SaveDependency(w2.m_filter);
+
+	return filterWrapper;
+}
+
+RifSCWrapper operator* (const RifSCWrapper& w1, const RifSCWrapper& w2)
+{
+	assert(w1.m_inputType != RifSCWrapper::NOT_SET);
+	assert(w2.m_inputType != RifSCWrapper::NOT_SET);
+
+	int operation = RIF_IMAGE_FILTER_MUL;
+	RifSCWrapper filterWrapper(w1.m_pContext, operation);
+	RifSCInternal& filter = *filterWrapper.m_filter;
+	RifSCWrapper::SetInputs(filter, w1, w2);
+	filterWrapper.m_inputType = RifSCWrapper::FILTER;
+	filterWrapper.m_inputImage = (rif_image)(rif_image_filter)filter;
+
+	filter.SaveDependency(w1.m_filter);
+	filter.SaveDependency(w2.m_filter);
+
+	return filterWrapper;
+}
+
+RifSCWrapper operator- (const RifSCWrapper& w1, const RifSCWrapper& w2)
+{
+	assert(w1.m_inputType != RifSCWrapper::NOT_SET);
+	assert(w2.m_inputType != RifSCWrapper::NOT_SET);
+
+	int operation = RIF_IMAGE_FILTER_SUB;
+	RifSCWrapper filterWrapper(w1.m_pContext, operation);
+	RifSCInternal& filter = *filterWrapper.m_filter;
+	RifSCWrapper::SetInputs(filter, w1, w2);
+	filterWrapper.m_inputType = RifSCWrapper::FILTER;
+	filterWrapper.m_inputImage = (rif_image)(rif_image_filter)filter;
+
+	filter.SaveDependency(w1.m_filter);
+	filter.SaveDependency(w2.m_filter);
+
+	return filterWrapper;
+}
+
+RifSCWrapper RifSCWrapper::min(const RifSCWrapper& w1, const RifSCWrapper& w2)
+{
+	assert(w1.m_inputType != RifSCWrapper::NOT_SET);
+	assert(w2.m_inputType != RifSCWrapper::NOT_SET);
+
+	int operation = RIF_IMAGE_FILTER_MIN;
+	RifSCWrapper filterWrapper(w1.m_pContext, operation);
+	RifSCInternal& filter = *filterWrapper.m_filter;
+	RifSCWrapper::SetInputs(filter, w1, w2);
+	filterWrapper.m_inputType = RifSCWrapper::FILTER;
+	filterWrapper.m_inputImage = (rif_image)(rif_image_filter)filter;
+
+	filter.SaveDependency(w1.m_filter);
+	filter.SaveDependency(w2.m_filter);
+
+	return filterWrapper;
+}
+
+const RifSCInternal& RifSCWrapper::GetInternalFilter(void)
+{
+	return *m_filter;
+}
+
+RifFilterShadowCatcher::RifFilterShadowCatcher(const RifContextWrapper* rifContext, std::uint32_t width, std::uint32_t height,
+	const std::string& modelsPath, bool useOpenImageDenoise)
+{
+}
+
+RifFilterShadowCatcher::~RifFilterShadowCatcher()
+{
+	mRifImageFilterHandle = nullptr; // image filter is destroyed automatically within m_res
+}
+
+void RifFilterShadowCatcher::AttachFilter(const RifContextWrapper* rifContext)
+{
+	rif_int rifStatus = RIF_SUCCESS;
+
+	// setup shadow catcher inputs
+	RifSCWrapper noAlpha(rifContext->Context(), 1.0f, 1.0f, 1.0f, 0.0f);
+	RifSCWrapper color(rifContext->Context(), mInputs.at(RifColor)->mRifImage);
+	RifSCWrapper opacity(rifContext->Context(), mInputs.at(RifOpacity)->mRifImage);
+	RifSCWrapper shadowCatcher(rifContext->Context(), mInputs.at(RifShadowCatcher)->mRifImage);
+	RifSCWrapper shadowColor(rifContext->Context(), mParams["shadowColor[0]"], mParams["shadowColor[1]"], mParams["shadowColor[2]"], 1.0f);
+	RifSCWrapper const1(rifContext->Context(), 1.0f);
+	RifSCWrapper shadowTransp(rifContext->Context(), mParams["shadowWeight"] - mParams["shadowTransp"]);
+	RifSCWrapper background(rifContext->Context(), mInputs.at(RifBackground)->mRifImage);
+	RifSCWrapper backgroundTransp(rifContext->Context(), mParams["bgWeight"] - mParams["bgTransparency"]);
+	RifSCWrapper backgroundColor(rifContext->Context(), mParams["bgColor[0]"], mParams["bgColor[1]"], mParams["bgColor[2]"], 1.0f);
+
+	// background * (1-min(alpha+sc*shadowTransp*(1-shadowColor), 1)) + color*alpha 
+	RifSCWrapper step1 = noAlpha * opacity + noAlpha * shadowCatcher * shadowTransp * (const1 - shadowColor);
+	RifSCWrapper step2 = const1 - RifSCWrapper::min(step1, const1);
+	m_res = background * backgroundTransp * backgroundColor * step2 + noAlpha * color * opacity;
+
+	mRifImageFilterHandle = m_res.GetInternalFilter();
+
+	rifStatus = rifCommandQueueAttachImageFilter(rifContext->Queue(), mRifImageFilterHandle,
+		mInputs.at(RifColor)->mRifImage, rifContext->Output());
+	assert(RIF_SUCCESS == rifStatus);
+
+	if (RIF_SUCCESS != rifStatus)
+		throw std::runtime_error("RPR denoiser failed to attach filter to queue.");
+}
+
+RifFilterReflectionCatcher::RifFilterReflectionCatcher(const RifContextWrapper* rifContext, std::uint32_t width, std::uint32_t height,
+	const std::string& modelsPath, bool useOpenImageDenoise)
+{
+}
+
+RifFilterReflectionCatcher::~RifFilterReflectionCatcher()
+{
+	mRifImageFilterHandle = nullptr; // image filter is destroyed automatically within m_res
+}
+
+void RifFilterReflectionCatcher::AttachFilter(const RifContextWrapper* rifContext)
+{
+	rif_int rifStatus = RIF_SUCCESS;
+
+	// setup shadow catcher inputs
+	RifSCWrapper noAlpha(rifContext->Context(), 1.0f, 1.0f, 1.0f, 0.0f);
+	RifSCWrapper color(rifContext->Context(), mInputs.at(RifColor)->mRifImage);
+	RifSCWrapper opacity(rifContext->Context(), mInputs.at(RifOpacity)->mRifImage);
+	RifSCWrapper reflectionCatcher(rifContext->Context(), mInputs.at(RifReflectionCatcher)->mRifImage);
+	RifSCWrapper const1(rifContext->Context(), 1.0f);
+	RifSCWrapper shadowTransp(rifContext->Context(), mParams["shadowWeight"] - mParams["shadowTransp"]);
+	RifSCWrapper background(rifContext->Context(), mInputs.at(RifBackground)->mRifImage);
+	RifSCWrapper backgroundTransp(rifContext->Context(), mParams["bgWeight"] - mParams["bgTransparency"]);
+	RifSCWrapper backgroundColor(rifContext->Context(), mParams["bgColor[0]"], mParams["bgColor[1]"], mParams["bgColor[2]"], 1.0f);
+
+	// background * (1-alpha) + color * (alpha+rc)
+	RifSCWrapper step1 = const1 - noAlpha * opacity;
+	RifSCWrapper step2 = background * backgroundTransp * backgroundColor * step1;
+	m_res = step2 + color * (noAlpha * opacity + reflectionCatcher);
+
+	mRifImageFilterHandle = m_res.GetInternalFilter();
+
+	rifStatus = rifCommandQueueAttachImageFilter(rifContext->Queue(), mRifImageFilterHandle,
+		mInputs.at(RifColor)->mRifImage, rifContext->Output());
+	assert(RIF_SUCCESS == rifStatus);
+
+	if (RIF_SUCCESS != rifStatus)
+		throw std::runtime_error("RPR denoiser failed to attach filter to queue.");
+}
+
+RifFilterShadowReflectionCatcher::RifFilterShadowReflectionCatcher(const RifContextWrapper* rifContext, std::uint32_t width, std::uint32_t height,
+	const std::string& modelsPath, bool useOpenImageDenoise)
+{
+}
+
+RifFilterShadowReflectionCatcher::~RifFilterShadowReflectionCatcher()
+{
+	mRifImageFilterHandle = nullptr; // image filter is destroyed automatically within m_res
+}
+
+void RifFilterShadowReflectionCatcher::AttachFilter(const RifContextWrapper* rifContext)
+{
+	rif_int rifStatus = RIF_SUCCESS;
+
+	// setup shadow catcher inputs
+	RifSCWrapper noAlpha(rifContext->Context(), 1.0f, 1.0f, 1.0f, 0.0f);
+	RifSCWrapper color(rifContext->Context(), mInputs.at(RifColor)->mRifImage);
+	RifSCWrapper opacity(rifContext->Context(), mInputs.at(RifOpacity)->mRifImage);
+	RifSCWrapper shadowCatcher(rifContext->Context(), mInputs.at(RifShadowCatcher)->mRifImage);
+	RifSCWrapper shadowColor(rifContext->Context(), mParams["shadowColor[0]"], mParams["shadowColor[1]"], mParams["shadowColor[2]"], 1.0f);
+	RifSCWrapper reflectionCatcher(rifContext->Context(), mInputs.at(RifReflectionCatcher)->mRifImage);
+	RifSCWrapper const1(rifContext->Context(), 1.0f);
+	RifSCWrapper shadowTransp(rifContext->Context(), mParams["shadowWeight"] - mParams["shadowTransp"]);
+	RifSCWrapper background(rifContext->Context(), mInputs.at(RifBackground)->mRifImage);
+	RifSCWrapper backgroundTransp(rifContext->Context(), mParams["bgWeight"] - mParams["bgTransparency"]);
+	RifSCWrapper backgroundColor(rifContext->Context(), mParams["bgColor[0]"], mParams["bgColor[1]"], mParams["bgColor[2]"], 1.0f);
+
+	// background * (1-min(alpha+sc, 1)) + color*(alpha+rc)
+	RifSCWrapper step1 = noAlpha * opacity + noAlpha * shadowCatcher * shadowTransp * (const1 - shadowColor);
+	RifSCWrapper step2 = const1 - RifSCWrapper::min(step1, const1);
+	RifSCWrapper step3 = color * (noAlpha * opacity + reflectionCatcher);
+	m_res = background * backgroundTransp * backgroundColor * step2 + step3;
+
+	mRifImageFilterHandle = m_res.GetInternalFilter();
+
+	rifStatus = rifCommandQueueAttachImageFilter(rifContext->Queue(), mRifImageFilterHandle,
+		mInputs.at(RifColor)->mRifImage, rifContext->Output());
+	assert(RIF_SUCCESS == rifStatus);
+
+	if (RIF_SUCCESS != rifStatus)
+		throw std::runtime_error("RPR denoiser failed to attach filter to queue.");
+}
+
+
+
