@@ -91,7 +91,7 @@ class ImageFilter final
 
 public:
 	explicit ImageFilter(const rpr_context rprContext, std::uint32_t width, std::uint32_t height,
-		const std::string& modelsPath = std::string());
+		const std::string& modelsPath = std::string(), bool forceCPUContext = false);
 	~ImageFilter();
 
 	void CreateFilter(RifFilterType rifFilteType, bool useOpenImageDenoise = false);
