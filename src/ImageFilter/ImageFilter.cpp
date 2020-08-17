@@ -56,7 +56,7 @@ static rpr_int GpuDeviceIdUsed(rpr_creation_flags contextFlags)
 	return -1;
 }
 
-ImageFilter::ImageFilter(const rpr_context rprContext, std::uint32_t width, std::uint32_t height, const std::string& modelsPath) :
+ImageFilter::ImageFilter(const rpr_context rprContext, std::uint32_t width, std::uint32_t height, const std::string& modelsPath, bool forceCPUContext /*= false*/) :
 	mWidth(width),
 	mHeight(height),
 	mModelsPath(modelsPath)
@@ -72,7 +72,7 @@ ImageFilter::ImageFilter(const rpr_context rprContext, std::uint32_t width, std:
 	{
 		mRifContext.reset( new RifContextGPUMetal(rprContext) );
 	}
-	else if (HasGpuContext(contextFlags))
+	else if (HasGpuContext(contextFlags) && !forceCPUContext)
 	{
 		mRifContext.reset(new RifContextGPU(rprContext));
 	}
