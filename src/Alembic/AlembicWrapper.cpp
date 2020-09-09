@@ -557,7 +557,7 @@ namespace RPRAlembicWrapper
 		if (uv)
 		{
 			polymeshObject->UV.resize(uv->rowCount());
-			for (int i = 0; i < polymeshObject->N.size(); ++i)
+			for (int i = 0; i < polymeshObject->UV.size(); ++i)
 			{
 				float *xy = (float *)&polymeshObject->UV[i];
 				uv->get(i, xy);
