@@ -2250,6 +2250,7 @@ def convertaiStandardSurface(aiMaterial, source):
 		defaultEnable(rprMaterial, aiMaterial, "sssEnable", "subsurface")
 		defaultEnable(rprMaterial, aiMaterial, "emissive", "emission")
 		defaultEnable(rprMaterial, aiMaterial, "clearCoat", "coat")
+		defaultEnable(rprMaterial, aiMaterial, "sheenEnabled", "sheen")
 
 		# Logging to file
 		start_log(aiMaterial, rprMaterial)
@@ -2284,7 +2285,7 @@ def convertaiStandardSurface(aiMaterial, source):
 
 		copyProperty(rprMaterial, aiMaterial, "volumeScatter", "subsurfaceColor")
 		copyProperty(rprMaterial, aiMaterial, "sssWeight", "subsurface")
-		copyProperty(rprMaterial, aiMaterial, "backscatteringWeight", "subsurface")
+		setProperty(rprMaterial, "backscatteringWeight", 0.05)
 		if mapDoesNotExist(aiMaterial, "subsurfaceRadius"):
 			setProperty(rprMaterial, "subsurfaceRadius", getProperty(aiMaterial, "subsurfaceRadius"))
 		else:
@@ -2296,14 +2297,16 @@ def convertaiStandardSurface(aiMaterial, source):
 			setProperty(rprMaterial, "diffuseWeight", 1)
 			setProperty(rprMaterial, "separateBackscatterColor", 0)
 			setProperty(rprMaterial, "multipleScattering", 0)
-			setProperty(rprMaterial, "backscatteringWeight", 0.75)
-
+		
 			subsurfaceType = getProperty(aiMaterial, "subsurfaceType")
 			if subsurfaceType == 0: # diffusion type
 				copyProperty(rprMaterial, aiMaterial, "diffuseColor", "subsurfaceColor")
-				setProperty(rprMaterial, "backscatteringWeight", 0.125)
 			elif subsurfaceType == 1: # randomwalk
-				setProperty(rprMaterial, "backscatteringWeight", 0.05)
+				pass
+
+		copyProperty(rprMaterial, aiMaterial, "sheenWeight", "sheen")
+		copyProperty(rprMaterial, aiMaterial, "sheenColor", "sheenColor")
+		invertValue(rprMaterial, aiMaterial, "sheenTint", "sheenRoughness")
 			
 		copyProperty(rprMaterial, aiMaterial, "coatColor", "coatColor")
 		copyProperty(rprMaterial, aiMaterial, "coatTransmissionColor", "coatColor")
