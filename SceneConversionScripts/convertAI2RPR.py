@@ -1380,6 +1380,32 @@ def convertPreMultiply(ai, source):
 	return rpr
 
 
+def convertaiRange(ai, source):
+
+	if cmds.objExists(ai + "_rpr"):
+		rpr = ai + "_rpr"
+	else:
+		rpr = cmds.shadingNode("remapColor", asUtility=True)
+		rpr = cmds.rename(rpr, ai + "_rpr")
+
+		# Logging to file
+		start_log(ai, rpr)
+
+		# Fields conversion
+		copyProperty(rpr, ai, "color", "input")
+
+		copyProperty(rpr, ai, "inputMin", "inputMin")
+		copyProperty(rpr, ai, "inputMax", "inputMax")
+		copyProperty(rpr, ai, "outputMin", "outputMin")
+		copyProperty(rpr, ai, "outputMax", "outputMax")
+
+		# Logging to file
+		end_log(ai)
+
+	rpr += "." + source
+	return rpr
+
+
 def convertVectorProduct(ai, source):
 
 	operation = getProperty(ai, "operation")
@@ -2250,6 +2276,7 @@ def convertaiStandardSurface(aiMaterial, source):
 		defaultEnable(rprMaterial, aiMaterial, "sssEnable", "subsurface")
 		defaultEnable(rprMaterial, aiMaterial, "emissive", "emission")
 		defaultEnable(rprMaterial, aiMaterial, "clearCoat", "coat")
+		defaultEnable(rprMaterial, aiMaterial, "sheenEnabled", "sheen")
 
 		# Logging to file
 		start_log(aiMaterial, rprMaterial)
@@ -2297,13 +2324,19 @@ def convertaiStandardSurface(aiMaterial, source):
 			setProperty(rprMaterial, "separateBackscatterColor", 0)
 			setProperty(rprMaterial, "multipleScattering", 0)
 			setProperty(rprMaterial, "backscatteringWeight", 0.75)
-
+		
 			subsurfaceType = getProperty(aiMaterial, "subsurfaceType")
 			if subsurfaceType == 0: # diffusion type
 				copyProperty(rprMaterial, aiMaterial, "diffuseColor", "subsurfaceColor")
 				setProperty(rprMaterial, "backscatteringWeight", 0.125)
 			elif subsurfaceType == 1: # randomwalk
 				setProperty(rprMaterial, "backscatteringWeight", 0.05)
+			elif subsurfaceType == 2: # randomwalk v2
+				setProperty(rprMaterial, "backscatteringWeight", 0.1)
+
+		copyProperty(rprMaterial, aiMaterial, "sheenWeight", "sheen")
+		copyProperty(rprMaterial, aiMaterial, "sheenColor", "sheenColor")
+		invertValue(rprMaterial, aiMaterial, "sheenTint", "sheenRoughness")
 			
 		copyProperty(rprMaterial, aiMaterial, "coatColor", "coatColor")
 		copyProperty(rprMaterial, aiMaterial, "coatTransmissionColor", "coatColor")
@@ -3222,7 +3255,8 @@ def convertMaterial(aiMaterial, source):
 		"aiTriplanar": convertaiTriplanar,
 		"aiUvTransform": convertaiUvTransform,
 		"aiLength": convertaiLength,
-		"aiExp": convertaiExp
+		"aiExp": convertaiExp,
+		"aiRange": convertaiRange
 	}
 
 	if ai_type in conversion_func:
@@ -3289,7 +3323,7 @@ def cleanScene():
 
 	listObjects = cmds.ls(l=True)
 	for obj in listObjects:
-		if isArnoldType(object):
+		if isArnoldType(obj):
 			try:
 				cmds.delete(obj)
 			except:
