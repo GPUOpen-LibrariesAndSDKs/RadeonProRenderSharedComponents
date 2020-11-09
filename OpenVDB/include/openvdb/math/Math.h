@@ -78,18 +78,7 @@ namespace math {
 /// @brief Return the unary negation of the given value.
 /// @note A negative<T>() specialization must be defined for each ValueType T
 /// for which unary negation is not defined.
-template<typename T> inline T negative(const T& val)
-{
-// disable unary minus on unsigned warning
-#if defined(_MSC_VER)
-#pragma warning(push)
-#pragma warning(disable:4146)
-#endif
-    return T(-val);
-#if defined(_MSC_VER)
-#pragma warning(pop)
-#endif
-}
+template<typename T> inline T negative(const T& val) { return T(-val); }
 /// Return the negation of the given boolean.
 template<> inline bool negative(const bool& val) { return !val; }
 /// Return the "negation" of the given string.

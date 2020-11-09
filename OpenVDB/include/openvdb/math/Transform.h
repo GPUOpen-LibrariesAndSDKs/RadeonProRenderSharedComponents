@@ -201,7 +201,11 @@ inline void
 doProcessTypedMap(Transform& transform, OpType& op)
 {
     ResolvedMapType& resolvedMap = *transform.map<ResolvedMapType>();
+#ifdef _MSC_VER
+    op.operator()<ResolvedMapType>(resolvedMap);
+#else
     op.template operator()<ResolvedMapType>(resolvedMap);
+#endif
 }
 
 /// Helper function used internally by processTypedMap()
@@ -210,7 +214,11 @@ inline void
 doProcessTypedMap(const Transform& transform, OpType& op)
 {
     const ResolvedMapType& resolvedMap = *transform.map<ResolvedMapType>();
+#ifdef _MSC_VER
+    op.operator()<ResolvedMapType>(resolvedMap);
+#else
     op.template operator()<ResolvedMapType>(resolvedMap);
+#endif
 }
 
 
