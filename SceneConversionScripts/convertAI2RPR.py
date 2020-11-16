@@ -1506,14 +1506,28 @@ def convertaiFacingRatio(ai, source):
 	if cmds.objExists(ai + "_rpr"):
 		rpr = ai + "_rpr"
 	else:
-		rpr = cmds.shadingNode("RPRLookup", asUtility=True)
-		rpr = cmds.rename(rpr, ai + "_rpr")
-			
+		rpr = cmds.shadingNode("RPRArithmetic", asUtility=True)
+		rpr = cmds.rename(rpr, ai + "_abs_rpr")
+
 		# Logging to file
 		start_log(ai, rpr)
 
-		# Fields conversion
-		setProperty(rpr, "type", 3)
+		setProperty(rpr, "operation", 25)
+
+		dot = cmds.shadingNode("RPRArithmetic", asUtility=True)
+		dot = cmds.rename(dot, ai + "_dot_rpr")
+		setProperty(dot, "operation", 11)
+		connectProperty(dot, "out", rpr, "inputA")
+
+		incident = cmds.shadingNode("RPRLookup", asUtility=True)
+		incident = cmds.rename(incident, ai + "_incident_rpr")
+		setProperty(incident, "type", 3)
+		connectProperty(incident, "out", dot, "inputA")
+
+		normal = cmds.shadingNode("RPRLookup", asUtility=True)
+		normal = cmds.rename(normal, ai + "_normal_rpr")
+		setProperty(normal, "type", 1)
+		connectProperty(normal, "out", dot, "inputB")
 
 		# Logging to file
 		end_log(ai)
@@ -2293,8 +2307,7 @@ def convertaiStandardSurface(aiMaterial, source):
 		copyProperty(rprMaterial, aiMaterial, "reflectAnisotropyRotation", "specularRotation")
 		copyProperty(rprMaterial, aiMaterial, "reflectIOR", "specularIOR")
 
-		metalness = getProperty(aiMaterial, "metalness")
-		if metalness:
+		if not mapDoesNotExist(aiMaterial, "metalness") or getProperty(aiMaterial, "metalness"):
 			setProperty(rprMaterial, "reflections", 1)
 			setProperty(rprMaterial, "diffuse", 1)
 			setProperty(rprMaterial, "reflectMetalMaterial", 1)
