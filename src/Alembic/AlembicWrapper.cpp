@@ -705,7 +705,7 @@ namespace RPRAlembicWrapper
 		else if (ICamera::matches(header)) 
 		{
 			// Implementation Notes
-		https://docs.google.com/presentation/d/1f5EVQTul15x4Q30IbeA7hP9_Xc0AgDnWsOacSQmnNT8/edit?usp=sharing
+			// https://docs.google.com/presentation/d/1f5EVQTul15x4Q30IbeA7hP9_Xc0AgDnWsOacSQmnNT8/edit?usp=sharing
 
 			ICamera camera(o);
 			auto schema = camera.getSchema();
