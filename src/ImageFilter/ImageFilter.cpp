@@ -730,6 +730,10 @@ void RifFilterWrapper::ApplyParameters() const
 			break;
 
 		case RifParamType::RifOther: // don't apply such parameter to image filter
+			if (param.first == "enable16bitCompute")
+			{
+				rifStatus = rifImageFilterSetComputeType(mRifImageFilterHandle, (param.second.mData.i == 0) ? RIF_COMPUTE_TYPE_FLOAT : RIF_COMPUTE_TYPE_HALF);
+			}
 			break;
 		}
 
