@@ -424,6 +424,7 @@ rif_image RifContextCPU::CreateRifImage(const rpr_framebuffer rprFrameBuffer, co
 RifContextGPUMetal::RifContextGPUMetal(const rpr_context rprContext)
 {
 #ifdef __APPLE__
+#ifdef ENABLE_GET_APPLE_DEVICE
 	int deviceCount = 0;
 	rif_int rifStatus = rifGetDeviceCount(rifBackendApiType, &deviceCount);
 	assert(RIF_SUCCESS == rifStatus);
@@ -463,6 +464,29 @@ RifContextGPUMetal::RifContextGPUMetal(const rpr_context rprContext)
 
 	if (RIF_SUCCESS != rifStatus)
 		throw std::runtime_error("RPR denoiser failed to create RIF command queue.");
+#else
+	int deviceCount = 0;
+	rif_int rifStatus = rifGetDeviceCount(rifBackendApiType, &deviceCount);
+	assert(RIF_SUCCESS == rifStatus);
+	assert(deviceCount != 0);
+
+	if (RIF_SUCCESS != rifStatus || 0 == deviceCount)
+		throw std::runtime_error("RPR denoiser hasn't found compatible devices.");
+
+	std::vector<rpr_char> path = GetRprCachePath(rprContext);
+
+	rifStatus = rifCreateContext(RIF_API_VERSION, rifBackendApiType, 0, path.data(), &mRifContextHandle);
+	assert(RIF_SUCCESS == rifStatus);
+
+	if (RIF_SUCCESS != rifStatus)
+		throw std::runtime_error("RPR denoiser failed to create RIF context.");
+
+	rifStatus = rifContextCreateCommandQueue(mRifContextHandle, &mRifCommandQueueHandle);
+	assert(RIF_SUCCESS == rifStatus);
+
+	if (RIF_SUCCESS != rifStatus)
+		throw std::runtime_error("RPR denoiser failed to create RIF command queue.");
+#endif
 #endif
 }
 
