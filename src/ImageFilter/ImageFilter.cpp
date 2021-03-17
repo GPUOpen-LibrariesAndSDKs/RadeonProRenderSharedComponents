@@ -68,11 +68,15 @@ ImageFilter::ImageFilter(const rpr_context rprContext, std::uint32_t width, std:
 	if (RPR_SUCCESS != rprStatus)
 		throw std::runtime_error("RPR denoiser failed to get context parameters.");
 
-	if (contextFlags & RPR_CREATION_FLAGS_ENABLE_METAL)
+	if (forceCPUContext)
+	{
+		mRifContext.reset(new RifContextCPU(rprContext));
+	}
+	else if (contextFlags & RPR_CREATION_FLAGS_ENABLE_METAL)
 	{
 		mRifContext.reset( new RifContextGPUMetal(rprContext) );
 	}
-	else if (HasGpuContext(contextFlags) && !forceCPUContext)
+	else if (HasGpuContext(contextFlags))
 	{
 		mRifContext.reset(new RifContextGPU(rprContext));
 	}
