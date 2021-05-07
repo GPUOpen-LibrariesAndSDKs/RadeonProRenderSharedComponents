@@ -453,3 +453,19 @@ public:
 };
 
 
+class RifFilterUpscaler final : RifFilterWrapper
+{
+	enum
+	{
+		UpscalerOutputRifImage,
+		AuxImageMax
+	};
+
+public:
+	explicit RifFilterUpscaler(const RifContextWrapper* rifContext, std::uint32_t width, std::uint32_t height,
+		const std::string& modelsPath, bool useOpenImageDenoise);
+	virtual ~RifFilterUpscaler();
+
+	virtual void AttachFilter(const RifContextWrapper* rifContext) override;
+};
+

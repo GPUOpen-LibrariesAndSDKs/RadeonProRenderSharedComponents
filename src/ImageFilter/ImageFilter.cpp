@@ -1481,6 +1481,7 @@ RifSCWrapper::RifSCWrapper(const RifSCWrapper& other)
 
 RifSCWrapper& RifSCWrapper::operator=(const RifSCWrapper& other)
 {
+
 	// self-assignment
 	if (this == &other)
 		return *this;
@@ -1721,5 +1722,64 @@ void RifFilterShadowReflectionCatcher::AttachFilter(const RifContextWrapper* rif
 		throw std::runtime_error("RPR denoiser failed to attach filter to queue.");
 }
 
+RifFilterUpscaler::RifFilterUpscaler(const RifContextWrapper* rifContext, std::uint32_t width, std::uint32_t height,
+	const std::string& modelsPath, bool useOpenImageDenoise)
+{
+	rif_int rifStatus = RIF_SUCCESS;
 
+	// main ML filter
+	rifStatus = rifContextCreateImageFilter(rifContext->Context(), RIF_IMAGE_FILTER_AI_UPSCALE, &mRifImageFilterHandle);
 
+	assert(RIF_SUCCESS == rifStatus);
+
+	if (RIF_SUCCESS != rifStatus)
+		throw std::runtime_error("RPR denoiser failed to create Upscale filter.");
+
+	rifStatus = rifImageFilterSetParameterString(mRifImageFilterHandle, "modelPath", modelsPath.c_str());
+	assert(RIF_SUCCESS == rifStatus);
+
+	if (RIF_SUCCESS != rifStatus)
+		throw std::runtime_error("RPR denoiser failed to set ML filter models path.");
+
+	mAuxImages.resize(AuxImageMax, nullptr);
+
+	// temporary output with 3 components per pixel (by design of the filter)
+	rif_image_desc desc = { width, height, 0, 0, 0, 3, RIF_COMPONENT_TYPE_FLOAT32 };
+
+	rifStatus = rifContextCreateImage(rifContext->Context(), &desc, nullptr, &mAuxImages[UpscalerOutputRifImage]);
+	assert(RIF_SUCCESS == rifStatus);
+
+	if (RIF_SUCCESS != rifStatus)
+		throw std::runtime_error("RPR denoiser failed to create output image.");
+
+	rifStatus = rifImageFilterSetParameter1u(mRifImageFilterHandle, "mode", RIF_AI_UPSCALE_MODE_BEST_2X);
+	assert(RIF_SUCCESS == rifStatus);
+
+	if (RIF_SUCCESS != rifStatus)
+		throw std::runtime_error("RPR denoiser failed to set RIF_AI_UPSCALE_MODE_BEST_2X parameter.");
+}
+
+RifFilterUpscaler::~RifFilterUpscaler()
+{
+
+}
+
+void RifFilterUpscaler::AttachFilter(const RifContextWrapper* rifContext)
+{
+	rif_int rifStatus = RIF_SUCCESS;
+
+	rifStatus = rifImageFilterSetParameterImage(mRifImageFilterHandle, "color", mInputs.at(RifColor)->mRifImage);
+	assert(RIF_SUCCESS == rifStatus);
+
+	if (RIF_SUCCESS != rifStatus)
+		throw std::runtime_error("RPR denoiser failed to setup Upscaler filter.");
+
+	// attach ML filter (main)
+	rifStatus = rifCommandQueueAttachImageFilter(rifContext->Queue(), mRifImageFilterHandle,
+		mInputs.at(RifColor)->mRifImage, mAuxImages[UpscalerOutputRifImage]);
+
+	assert(RIF_SUCCESS == rifStatus);
+
+	if (RIF_SUCCESS != rifStatus)
+		throw std::runtime_error("RPR denoiser failed to attach filter to queue.");
+}
