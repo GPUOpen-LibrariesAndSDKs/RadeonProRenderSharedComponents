@@ -59,7 +59,9 @@ static rpr_int GpuDeviceIdUsed(rpr_creation_flags contextFlags)
 ImageFilter::ImageFilter(const rpr_context rprContext, std::uint32_t width, std::uint32_t height, const std::string& modelsPath, bool forceCPUContext /*= false*/) :
 	mWidth(width),
 	mHeight(height),
-	mModelsPath(modelsPath)
+	mModelsPath(modelsPath),
+	mInputOverrideWidth(0),
+	mInputOverrideHeight(0)
 {
 	rpr_creation_flags contextFlags = 0;
 	rpr_int rprStatus = rprContextGetInfo(rprContext, RPR_CONTEXT_CREATION_FLAGS, sizeof(rpr_creation_flags), &contextFlags, nullptr);
@@ -134,6 +136,10 @@ void ImageFilter::CreateFilter(RifFilterType rifFilteType, bool useOpenImageDeno
 		mRifFilter.reset(new RifFilterShadowReflectionCatcher(mRifContext.get(), mWidth, mHeight, mModelsPath, useOpenImageDenoise));
 		break;
 
+	case RifFilterType::Upscaler:
+		mRifFilter.reset(new RifFilterUpscaler(mRifContext.get(), mWidth, mHeight, mModelsPath));
+		break;
+
 	default:
 		assert("Unknown filter type");
 	}
@@ -165,7 +171,9 @@ void ImageFilter::AddInput(RifFilterInput inputId, const rpr_framebuffer rprFram
 
 void ImageFilter::AddInput(RifFilterInput inputId, float* memPtr, size_t size, float sigma) const
 {
-	rif_image_desc desc = { mWidth, mHeight, 0, 0, 0, 4, RIF_COMPONENT_TYPE_FLOAT32 };
+	rif_image_desc desc = { mInputOverrideWidth > 0 ? mInputOverrideWidth : mWidth, 
+							mInputOverrideHeight > 0 ? mInputOverrideHeight : mHeight, 
+							0, 0, 0, 4, RIF_COMPONENT_TYPE_FLOAT32 };
 
 	rif_image rifImage = nullptr;
 
@@ -221,6 +229,12 @@ std::vector<float> ImageFilter::GetData() const
 		throw std::runtime_error("RPR denoiser failed to unmap output data.");
 
 	return std::move(floatData);
+}
+
+void ImageFilter::SetInputOverrideSize(std::uint32_t width, std::uint32_t height)
+{
+	mInputOverrideWidth = width;
+	mInputOverrideHeight = height;
 }
 
 RifContextWrapper::~RifContextWrapper()
@@ -1723,11 +1737,11 @@ void RifFilterShadowReflectionCatcher::AttachFilter(const RifContextWrapper* rif
 }
 
 RifFilterUpscaler::RifFilterUpscaler(const RifContextWrapper* rifContext, std::uint32_t width, std::uint32_t height,
-	const std::string& modelsPath, bool useOpenImageDenoise)
+	const std::string& modelsPath)
 {
 	rif_int rifStatus = RIF_SUCCESS;
 
-	// main ML filter
+	// Upscaler filter
 	rifStatus = rifContextCreateImageFilter(rifContext->Context(), RIF_IMAGE_FILTER_AI_UPSCALE, &mRifImageFilterHandle);
 
 	assert(RIF_SUCCESS == rifStatus);
@@ -1740,17 +1754,6 @@ RifFilterUpscaler::RifFilterUpscaler(const RifContextWrapper* rifContext, std::u
 
 	if (RIF_SUCCESS != rifStatus)
 		throw std::runtime_error("RPR denoiser failed to set ML filter models path.");
-
-	mAuxImages.resize(AuxImageMax, nullptr);
-
-	// temporary output with 3 components per pixel (by design of the filter)
-	rif_image_desc desc = { width, height, 0, 0, 0, 3, RIF_COMPONENT_TYPE_FLOAT32 };
-
-	rifStatus = rifContextCreateImage(rifContext->Context(), &desc, nullptr, &mAuxImages[UpscalerOutputRifImage]);
-	assert(RIF_SUCCESS == rifStatus);
-
-	if (RIF_SUCCESS != rifStatus)
-		throw std::runtime_error("RPR denoiser failed to create output image.");
 
 	rifStatus = rifImageFilterSetParameter1u(mRifImageFilterHandle, "mode", RIF_AI_UPSCALE_MODE_BEST_2X);
 	assert(RIF_SUCCESS == rifStatus);
@@ -1766,17 +1769,9 @@ RifFilterUpscaler::~RifFilterUpscaler()
 
 void RifFilterUpscaler::AttachFilter(const RifContextWrapper* rifContext)
 {
-	rif_int rifStatus = RIF_SUCCESS;
-
-	rifStatus = rifImageFilterSetParameterImage(mRifImageFilterHandle, "color", mInputs.at(RifColor)->mRifImage);
-	assert(RIF_SUCCESS == rifStatus);
-
-	if (RIF_SUCCESS != rifStatus)
-		throw std::runtime_error("RPR denoiser failed to setup Upscaler filter.");
-
-	// attach ML filter (main)
-	rifStatus = rifCommandQueueAttachImageFilter(rifContext->Queue(), mRifImageFilterHandle,
-		mInputs.at(RifColor)->mRifImage, mAuxImages[UpscalerOutputRifImage]);
+	// attach Upscale filter
+	rif_int rifStatus = rifCommandQueueAttachImageFilter(rifContext->Queue(), mRifImageFilterHandle,
+		mInputs.at(RifColor)->mRifImage, rifContext->Output());
 
 	assert(RIF_SUCCESS == rifStatus);
 
