@@ -33,6 +33,7 @@ enum class RifFilterType
 	ShadowCatcher,
 	ReflectionCatcher,
 	ShadowReflectionCatcher,
+	Upscaler
 };
 
 enum RifFilterInput
@@ -89,6 +90,9 @@ class ImageFilter final
 	std::uint32_t mHeight;
 	std::string mModelsPath;
 
+	std::uint32_t mInputOverrideWidth;
+	std::uint32_t mInputOverrideHeight;
+
 public:
 	explicit ImageFilter(const rpr_context rprContext, std::uint32_t width, std::uint32_t height,
 		const std::string& modelsPath = std::string(), bool forceCPUContext = false);
@@ -106,6 +110,8 @@ public:
 	void Run() const;
 
 	std::vector<float> GetData() const;
+
+	void SetInputOverrideSize(std::uint32_t width, std::uint32_t height);
 };
 
 
@@ -452,4 +458,14 @@ public:
 	virtual void AttachFilter(const RifContextWrapper* rifContext) override;
 };
 
+
+class RifFilterUpscaler final : public RifFilterWrapper
+{
+public:
+	explicit RifFilterUpscaler(const RifContextWrapper* rifContext, std::uint32_t width, std::uint32_t height,
+		const std::string& modelsPath);
+	virtual ~RifFilterUpscaler();
+
+	virtual void AttachFilter(const RifContextWrapper* rifContext) override;
+};
 
