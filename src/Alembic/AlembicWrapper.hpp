@@ -380,7 +380,7 @@ namespace RPRAlembicWrapper
 		int resolution_x = 0; /* Resolution x (in pixels) */
 		int resolution_y = 0; /* Resolution y (in pixels) */
 		float focalLength_mm = 50.0f; /* Focal Length (in millimeter) */
-		float aperture_horizontal_mm = 41.4214; /* Aperture (in millimeter) */
+		float aperture_horizontal_mm = 41.4214f; /* Aperture (in millimeter) */
 		float aperture_vertical_mm = 0;         /* Aperture (in millimeter) */
 		float nearClip = 0.001f;  /* Near Clipping (in meter) */
 		float farClip = 10000.0f; /* Far  Clipping (in meter) */

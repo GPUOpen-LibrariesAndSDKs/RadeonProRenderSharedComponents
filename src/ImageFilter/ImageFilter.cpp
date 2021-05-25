@@ -59,7 +59,9 @@ static rpr_int GpuDeviceIdUsed(rpr_creation_flags contextFlags)
 ImageFilter::ImageFilter(const rpr_context rprContext, std::uint32_t width, std::uint32_t height, const std::string& modelsPath, bool forceCPUContext /*= false*/) :
 	mWidth(width),
 	mHeight(height),
-	mModelsPath(modelsPath)
+	mModelsPath(modelsPath),
+	mInputOverrideWidth(0),
+	mInputOverrideHeight(0)
 {
 	rpr_creation_flags contextFlags = 0;
 	rpr_int rprStatus = rprContextGetInfo(rprContext, RPR_CONTEXT_CREATION_FLAGS, sizeof(rpr_creation_flags), &contextFlags, nullptr);
@@ -134,6 +136,10 @@ void ImageFilter::CreateFilter(RifFilterType rifFilteType, bool useOpenImageDeno
 		mRifFilter.reset(new RifFilterShadowReflectionCatcher(mRifContext.get(), mWidth, mHeight, mModelsPath, useOpenImageDenoise));
 		break;
 
+	case RifFilterType::Upscaler:
+		mRifFilter.reset(new RifFilterUpscaler(mRifContext.get(), mWidth, mHeight, mModelsPath));
+		break;
+
 	default:
 		assert("Unknown filter type");
 	}
@@ -165,7 +171,9 @@ void ImageFilter::AddInput(RifFilterInput inputId, const rpr_framebuffer rprFram
 
 void ImageFilter::AddInput(RifFilterInput inputId, float* memPtr, size_t size, float sigma) const
 {
-	rif_image_desc desc = { mWidth, mHeight, 0, 0, 0, 4, RIF_COMPONENT_TYPE_FLOAT32 };
+	rif_image_desc desc = { mInputOverrideWidth > 0 ? mInputOverrideWidth : mWidth, 
+							mInputOverrideHeight > 0 ? mInputOverrideHeight : mHeight, 
+							0, 0, 0, 4, RIF_COMPONENT_TYPE_FLOAT32 };
 
 	rif_image rifImage = nullptr;
 
@@ -221,6 +229,12 @@ std::vector<float> ImageFilter::GetData() const
 		throw std::runtime_error("RPR denoiser failed to unmap output data.");
 
 	return std::move(floatData);
+}
+
+void ImageFilter::SetInputOverrideSize(std::uint32_t width, std::uint32_t height)
+{
+	mInputOverrideWidth = width;
+	mInputOverrideHeight = height;
 }
 
 RifContextWrapper::~RifContextWrapper()
@@ -1481,6 +1495,7 @@ RifSCWrapper::RifSCWrapper(const RifSCWrapper& other)
 
 RifSCWrapper& RifSCWrapper::operator=(const RifSCWrapper& other)
 {
+
 	// self-assignment
 	if (this == &other)
 		return *this;
@@ -1721,5 +1736,45 @@ void RifFilterShadowReflectionCatcher::AttachFilter(const RifContextWrapper* rif
 		throw std::runtime_error("RPR denoiser failed to attach filter to queue.");
 }
 
+RifFilterUpscaler::RifFilterUpscaler(const RifContextWrapper* rifContext, std::uint32_t width, std::uint32_t height,
+	const std::string& modelsPath)
+{
+	rif_int rifStatus = RIF_SUCCESS;
 
+	// Upscaler filter
+	rifStatus = rifContextCreateImageFilter(rifContext->Context(), RIF_IMAGE_FILTER_AI_UPSCALE, &mRifImageFilterHandle);
 
+	assert(RIF_SUCCESS == rifStatus);
+
+	if (RIF_SUCCESS != rifStatus)
+		throw std::runtime_error("RPR denoiser failed to create Upscale filter.");
+
+	rifStatus = rifImageFilterSetParameterString(mRifImageFilterHandle, "modelPath", modelsPath.c_str());
+	assert(RIF_SUCCESS == rifStatus);
+
+	if (RIF_SUCCESS != rifStatus)
+		throw std::runtime_error("RPR denoiser failed to set ML filter models path.");
+
+	rifStatus = rifImageFilterSetParameter1u(mRifImageFilterHandle, "mode", RIF_AI_UPSCALE_MODE_BEST_2X);
+	assert(RIF_SUCCESS == rifStatus);
+
+	if (RIF_SUCCESS != rifStatus)
+		throw std::runtime_error("RPR denoiser failed to set RIF_AI_UPSCALE_MODE_BEST_2X parameter.");
+}
+
+RifFilterUpscaler::~RifFilterUpscaler()
+{
+
+}
+
+void RifFilterUpscaler::AttachFilter(const RifContextWrapper* rifContext)
+{
+	// attach Upscale filter
+	rif_int rifStatus = rifCommandQueueAttachImageFilter(rifContext->Queue(), mRifImageFilterHandle,
+		mInputs.at(RifColor)->mRifImage, rifContext->Output());
+
+	assert(RIF_SUCCESS == rifStatus);
+
+	if (RIF_SUCCESS != rifStatus)
+		throw std::runtime_error("RPR denoiser failed to attach filter to queue.");
+}
