@@ -1755,7 +1755,7 @@ RifFilterUpscaler::RifFilterUpscaler(const RifContextWrapper* rifContext, std::u
 	if (RIF_SUCCESS != rifStatus)
 		throw std::runtime_error("RPR denoiser failed to set ML filter models path.");
 
-	rifStatus = rifImageFilterSetParameter1u(mRifImageFilterHandle, "mode", RIF_AI_UPSCALE_MODE_BEST_2X);
+	rifStatus = rifImageFilterSetParameter1u(mRifImageFilterHandle, "mode", RIF_AI_UPSCALE_MODE_FAST_2X);
 	assert(RIF_SUCCESS == rifStatus);
 
 	if (RIF_SUCCESS != rifStatus)
