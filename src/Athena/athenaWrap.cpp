@@ -183,6 +183,7 @@ AthenaStatus athenaUpload(std::wstring& sendFile, wchar_t* fileExtension, std::w
 
 	std::string pyCommand = 
 		"import boto3 \n"
+		"import os\n"
 		"from botocore.exceptions import ClientError \n"
 		"from boto3.exceptions import S3UploadFailedError \n"
 		"ACCESS_KEY = '##removed##' \n"

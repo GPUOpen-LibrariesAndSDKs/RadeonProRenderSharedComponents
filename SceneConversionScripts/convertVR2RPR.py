@@ -11,22 +11,22 @@
 
 # Vray to RadeonProRender Converter
 
-import time
 import os
+import sys
+import time
 import math
 import traceback
 
 import maya.mel as mel
 import maya.cmds as cmds
 
-VR2RPR_CONVERTER_VERSION = "1.6.3"
+VR2RPR_CONVERTER_VERSION = "2.0.0"
 
 MAX_RAY_DEPTH = None
 
 # log functions
 
 def write_converted_property_log(rpr_name, rs_name, rpr_attr, rs_attr):
-
 	try:
 		file_path = cmds.file(q=True, sceneName=True) + ".log"
 		with open(file_path, 'a') as f:
@@ -36,7 +36,6 @@ def write_converted_property_log(rpr_name, rs_name, rpr_attr, rs_attr):
 
 
 def write_own_property_log(text):
-
 	try:
 		file_path = cmds.file(q=True, sceneName=True) + ".log"
 		with open(file_path, 'a') as f:
@@ -46,7 +45,6 @@ def write_own_property_log(text):
 
 
 def start_log(rs, rpr):
-
 	try:
 		text  = u"Found node: \r\n    name: {} \r\n".format(rs).encode('utf-8')
 		text += "type: {} \r\n".format(cmds.objectType(rs))
@@ -61,9 +59,7 @@ def start_log(rs, rpr):
 		pass
 	
 
-
 def end_log(rs):
-
 	try:
 		text  = u"Conversion of {} is finished.\n\n \r\n".format(rs).encode('utf-8')
 
@@ -73,6 +69,13 @@ def end_log(rs):
 	except:
 		pass
 		
+
+def validateStringType(text):
+	if sys.version_info.major == 3:
+		return type(text) == str
+	else:
+		return type(text) == unicode
+
 
 # additional fucntions
 
@@ -148,7 +151,7 @@ def copyProperty(rpr_name, conv_name, rpr_attr, conv_attr):
 
 		# field conversion
 		else:
-			if vr_type == rpr_type or vr_type == unicode:
+			if vr_type == rpr_type or validateStringType(vr_type):
 				setProperty(rpr_name, rpr_attr, getProperty(conv_name, conv_attr))
 			elif vr_type == tuple and rpr_type == float:
 				if cmds.objExists(conv_field + "R"):
@@ -195,7 +198,7 @@ def setProperty(rpr_name, rpr_attr, value):
 
 		if type(value) == tuple:
 			cmds.setAttr(rpr_field, value[0], value[1], value[2])
-		elif type(value) == str or type(value) == unicode:
+		elif type(value) == str or validateStringType(value):
 			cmds.setAttr(rpr_field, value, type="string")
 		else:
 			cmds.setAttr(rpr_field, value)
@@ -3408,6 +3411,5 @@ def onMayaDroppedPythonFile(empty):
 
 if __name__ == "__main__":
 	manual_launch()
-
 
 
