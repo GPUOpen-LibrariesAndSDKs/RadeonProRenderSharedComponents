@@ -11,15 +11,17 @@
 
 # Arnold to RadeonProRender Converter
 
-import time
+
 import os
+import sys
+import time
 import math
 import traceback
 
 import maya.mel as mel
 import maya.cmds as cmds
 
-ARNOLD2RPR_CONVERTER_VERSION = "2.9.7"
+ARNOLD2RPR_CONVERTER_VERSION = "3.0.0"
 
 # log functions
 
@@ -67,6 +69,14 @@ def end_log(ai):
 			f.write(text)
 	except:
 		pass
+
+
+def validateStringType(text):
+	if sys.version_info.major == 3:
+		return type(text) == str
+	else:
+		return type(text) == unicode
+
 
 # additional fucntions
 
@@ -133,7 +143,7 @@ def copyProperty(rpr_name, conv_name, rpr_attr, conv_attr):
 
 		# field conversion
 		else:
-			if ai_type == rpr_type or ai_type == unicode:
+			if ai_type == rpr_type or validateStringType(ai_type):
 				setProperty(rpr_name, rpr_attr, getProperty(conv_name, conv_attr))
 			elif ai_type == tuple and rpr_type == float:
 				if cmds.objExists(conv_field + "R"):
@@ -180,7 +190,7 @@ def setProperty(rpr_name, rpr_attr, value):
 
 		if type(value) == tuple:
 			cmds.setAttr(rpr_field, value[0], value[1], value[2])
-		elif type(value) == str or type(value) == unicode:
+		elif type(value) == str or validateStringType(value):
 			cmds.setAttr(rpr_field, value, type="string")
 		else:
 			cmds.setAttr(rpr_field, value)
