@@ -19,7 +19,7 @@ limitations under the License.
 
 #include <vector>
 #include <cassert>
-#include <exception>
+#include <stdexcept>
 
 static bool HasGpuContext(rpr_creation_flags contextFlags)
 {
