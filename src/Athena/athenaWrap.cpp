@@ -18,7 +18,7 @@ limitations under the License.
 #include <algorithm>
 #ifdef WIN32
 	#include <Windows.h>
-	#include <experimental/filesystem>
+	#include <filesystem>
 #else
 	#include <sys/time.h>
 	#include <sys/stat.h>
@@ -229,7 +229,7 @@ bool AthenaWrapper::AthenaSendFile(std::function<int(std::string)>& actionFunc)
 
 	// create folder
 #ifdef WIN32
-	bool folderCreated = std::experimental::filesystem::create_directory(m_folderPath);
+	bool folderCreated = std::filesystem::create_directory(m_folderPath);
 #else
     std::string s_folderPath = SharedComponentsUtils::ws2s(m_folderPath);
 	bool folderCreated = (mkdir(s_folderPath.c_str(), 0777) != -1);
