@@ -27,6 +27,6 @@ public:
 	GridT maxValue;
 	GridT minValue;
 
-	bool IsValid(void) { return ((gridSizeX > 0) && (gridSizeY > 0) && (gridSizeZ > 0)); }
+	bool IsValid(void) { return ((gridSizeX > 0) && (gridSizeY > 0) && (gridSizeZ > 0) && (gridOnIndices.size() > 0)); }
 };
 
