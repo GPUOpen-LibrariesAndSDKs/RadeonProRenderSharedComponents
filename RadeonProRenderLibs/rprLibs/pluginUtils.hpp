@@ -180,6 +180,12 @@ std::tuple<bool, std::string> ReadFileGridToVDBGrid(
 			outGridData.size.gridSizeY = maxBBox.dim().y();
 			outGridData.size.gridSizeZ = maxBBox.dim().z();
 
+			// save voxel size
+			openvdb::math::Vec3d voxelSize = pBaseGrid->transform().voxelSize();
+			outGridData.size.voxelSizeX = voxelSize.x();
+			outGridData.size.voxelSizeY = voxelSize.y();
+			outGridData.size.voxelSizeZ = voxelSize.z();
+
 			// process grid according to its type
 			bool success = ProcessVDBGrid<GridValueT>(outGridData, pBaseGrid, maxBBox);
 
