@@ -15,6 +15,12 @@ public:
 	double voxelSizeZ;
 
 	bool isValid() { return ((gridSizeX > 0) && (gridSizeY > 0) && (gridSizeZ > 0)); }
+
+	size_t& operator[](size_t idx) {
+		if (idx == 0) return gridSizeX;
+		if (idx == 1) return gridSizeY;
+		return gridSizeZ;
+	}
 };
 
 // Wrapper around vdb grid that makes it convinient to pass data to RPR
@@ -42,4 +48,6 @@ public:
 
 	bool IsValid(void) { return (size.isValid() && gridOnIndices.size() > 0); }
 };
+
+using VDBGridParams = std::map<std::string, VDBGridSize>;
 

@@ -43,10 +43,9 @@ bool ProcessVDBGrid(
 // RET - string - error description
 // IN - string - name of the file
 // IN - GridParams - data contaijner that holds grid name and grid dimensions
-using GridParams = std::map<std::string, std::array<int, 3>>;
 std::tuple<bool, std::string> ReadVolumeDataFromFile(
 	const std::string& filename, 
-	GridParams& gridParams);	
+	VDBGridParams& gridParams);	
 
 
 // Reads vdb grid into provided data container and also adjust voxel indices values if necessary
@@ -214,10 +213,9 @@ std::tuple<bool, std::string> ReadFileGridToVDBGrid(
 // RET - string - error description
 // IN - string - name of the file
 // IN - GridParams - data contaijner that holds grid name and grid dimensions
-using GridParams = std::map<std::string, std::array<int, 3>>;
 std::tuple<bool, std::string> ReadVolumeDataFromFile(
 	const std::string& filename, 
-	GridParams& gridParams)
+	VDBGridParams& gridParams)
 {
 	// back-off
 	if (filename.empty())
