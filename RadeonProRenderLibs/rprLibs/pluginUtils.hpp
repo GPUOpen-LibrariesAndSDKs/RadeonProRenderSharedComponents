@@ -176,9 +176,9 @@ std::tuple<bool, std::string> ReadFileGridToVDBGrid(
 				return std::make_tuple(false, "wrong grid type!");
 
 			// save grid dimensions
-			outGridData.gridSizeX = maxBBox.dim().x();
-			outGridData.gridSizeY = maxBBox.dim().y();
-			outGridData.gridSizeZ = maxBBox.dim().z();
+			outGridData.size.gridSizeX = maxBBox.dim().x();
+			outGridData.size.gridSizeY = maxBBox.dim().y();
+			outGridData.size.gridSizeZ = maxBBox.dim().z();
 
 			// process grid according to its type
 			bool success = ProcessVDBGrid<GridValueT>(outGridData, pBaseGrid, maxBBox);
