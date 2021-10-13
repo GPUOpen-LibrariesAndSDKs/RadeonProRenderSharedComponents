@@ -255,10 +255,15 @@ std::tuple<bool, std::string> ReadVolumeDataFromFile(
 			// get grid dimensions from file (we need this for UI)
 			openvdb::GridBase::Ptr baseGrid = file.readGrid(nameIter.gridName());
 			openvdb::Coord gridDimensions = baseGrid->evalActiveVoxelDim();
+			openvdb::math::Vec3d voxelSize = baseGrid->transform().voxelSize();
 
-			gridParams[gridName][0] = gridDimensions.x();
-			gridParams[gridName][1] = gridDimensions.y();
-			gridParams[gridName][2] = gridDimensions.z();
+			gridParams[gridName].gridSizeX = gridDimensions.x();
+			gridParams[gridName].gridSizeY = gridDimensions.y();
+			gridParams[gridName].gridSizeZ = gridDimensions.z();
+
+			gridParams[gridName].voxelSizeX = voxelSize.x();
+			gridParams[gridName].voxelSizeY = voxelSize.y();
+			gridParams[gridName].voxelSizeZ = voxelSize.z();
 		}
 
 		// close the file.
