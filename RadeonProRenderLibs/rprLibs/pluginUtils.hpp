@@ -43,10 +43,9 @@ bool ProcessVDBGrid(
 // RET - string - error description
 // IN - string - name of the file
 // IN - GridParams - data contaijner that holds grid name and grid dimensions
-using GridParams = std::map<std::string, std::array<int, 3>>;
 std::tuple<bool, std::string> ReadVolumeDataFromFile(
 	const std::string& filename, 
-	GridParams& gridParams);	
+	VDBGridParams& gridParams);	
 
 
 // Reads vdb grid into provided data container and also adjust voxel indices values if necessary
@@ -176,9 +175,15 @@ std::tuple<bool, std::string> ReadFileGridToVDBGrid(
 				return std::make_tuple(false, "wrong grid type!");
 
 			// save grid dimensions
-			outGridData.gridSizeX = maxBBox.dim().x();
-			outGridData.gridSizeY = maxBBox.dim().y();
-			outGridData.gridSizeZ = maxBBox.dim().z();
+			outGridData.size.gridSizeX = maxBBox.dim().x();
+			outGridData.size.gridSizeY = maxBBox.dim().y();
+			outGridData.size.gridSizeZ = maxBBox.dim().z();
+
+			// save voxel size
+			openvdb::math::Vec3d voxelSize = pBaseGrid->transform().voxelSize();
+			outGridData.size.voxelSizeX = voxelSize.x();
+			outGridData.size.voxelSizeY = voxelSize.y();
+			outGridData.size.voxelSizeZ = voxelSize.z();
 
 			// process grid according to its type
 			bool success = ProcessVDBGrid<GridValueT>(outGridData, pBaseGrid, maxBBox);
@@ -208,10 +213,9 @@ std::tuple<bool, std::string> ReadFileGridToVDBGrid(
 // RET - string - error description
 // IN - string - name of the file
 // IN - GridParams - data contaijner that holds grid name and grid dimensions
-using GridParams = std::map<std::string, std::array<int, 3>>;
 std::tuple<bool, std::string> ReadVolumeDataFromFile(
 	const std::string& filename, 
-	GridParams& gridParams)
+	VDBGridParams& gridParams)
 {
 	// back-off
 	if (filename.empty())
@@ -251,10 +255,15 @@ std::tuple<bool, std::string> ReadVolumeDataFromFile(
 			// get grid dimensions from file (we need this for UI)
 			openvdb::GridBase::Ptr baseGrid = file.readGrid(nameIter.gridName());
 			openvdb::Coord gridDimensions = baseGrid->evalActiveVoxelDim();
+			openvdb::math::Vec3d voxelSize = baseGrid->transform().voxelSize();
 
-			gridParams[gridName][0] = gridDimensions.x();
-			gridParams[gridName][1] = gridDimensions.y();
-			gridParams[gridName][2] = gridDimensions.z();
+			gridParams[gridName].gridSizeX = gridDimensions.x();
+			gridParams[gridName].gridSizeY = gridDimensions.y();
+			gridParams[gridName].gridSizeZ = gridDimensions.z();
+
+			gridParams[gridName].voxelSizeX = voxelSize.x();
+			gridParams[gridName].voxelSizeY = voxelSize.y();
+			gridParams[gridName].voxelSizeZ = voxelSize.z();
 		}
 
 		// close the file.
