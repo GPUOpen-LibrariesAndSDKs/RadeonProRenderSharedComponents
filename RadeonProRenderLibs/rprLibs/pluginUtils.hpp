@@ -4,6 +4,8 @@
 #include <tuple>
 #include <string>
 #include <memory>
+#include <iostream>
+#include <fstream>
 
 #include <openvdb/openvdb.h>
 #include "pluginUtils.h"
@@ -84,9 +86,9 @@ bool ProcessVDBGrid(
 	{
 		// for RPR negative voxel indices are invalid
 		openvdb::Coord curCoord = iter.getCoord();
-		openvdb::Int32 x = curCoord.x() - lowerBound.x();
-		openvdb::Int32 y = curCoord.y() - lowerBound.y();
-		openvdb::Int32 z = curCoord.z() - lowerBound.z();
+		openvdb::Int32 x = curCoord.x(); //- lowerBound.x();
+		openvdb::Int32 y = curCoord.y(); //- lowerBound.y();
+		openvdb::Int32 z = curCoord.z(); //- lowerBound.z();
 
 		gridOnIndices.push_back(x);
 		gridOnIndices.push_back(y);
@@ -175,9 +177,18 @@ std::tuple<bool, std::string> ReadFileGridToVDBGrid(
 				return std::make_tuple(false, "wrong grid type!");
 
 			// save grid dimensions
-			outGridData.size.gridSizeX = maxBBox.dim().x();
-			outGridData.size.gridSizeY = maxBBox.dim().y();
-			outGridData.size.gridSizeZ = maxBBox.dim().z();
+			const openvdb::Coord& lowerBound = maxBBox.min();
+			outGridData.size.lowerBound[0] = lowerBound.x();
+			outGridData.size.lowerBound[1] = lowerBound.y();
+			outGridData.size.lowerBound[2] = lowerBound.z();
+			const openvdb::Coord& upperBound = maxBBox.max();
+			outGridData.size.upperBound[0] = upperBound.x();
+			outGridData.size.upperBound[1] = upperBound.y();
+			outGridData.size.upperBound[2] = upperBound.z();
+
+			outGridData.size.gridSizeX = upperBound.x();//maxBBox.dim().x();
+			outGridData.size.gridSizeY = upperBound.y();//maxBBox.dim().y();
+			outGridData.size.gridSizeZ = upperBound.z();//maxBBox.dim().z();
 
 			// save voxel size
 			openvdb::math::Vec3d voxelSize = pBaseGrid->transform().voxelSize();
@@ -212,7 +223,7 @@ std::tuple<bool, std::string> ReadFileGridToVDBGrid(
 // RET - bool - true if data was read succesfully
 // RET - string - error description
 // IN - string - name of the file
-// IN - GridParams - data contaijner that holds grid name and grid dimensions
+// IN - GridParams - data container that holds grid name and grid dimensions
 std::tuple<bool, std::string> ReadVolumeDataFromFile(
 	const std::string& filename, 
 	VDBGridParams& gridParams)
@@ -257,9 +268,19 @@ std::tuple<bool, std::string> ReadVolumeDataFromFile(
 			openvdb::Coord gridDimensions = baseGrid->evalActiveVoxelDim();
 			openvdb::math::Vec3d voxelSize = baseGrid->transform().voxelSize();
 
-			gridParams[gridName].gridSizeX = gridDimensions.x();
-			gridParams[gridName].gridSizeY = gridDimensions.y();
-			gridParams[gridName].gridSizeZ = gridDimensions.z();
+			openvdb::CoordBBox gridBBox = baseGrid->evalActiveVoxelBoundingBox();
+			const openvdb::Coord& lowerBound = gridBBox.min();
+			gridParams[gridName].lowerBound[0] = lowerBound.x();
+			gridParams[gridName].lowerBound[1] = lowerBound.y();
+			gridParams[gridName].lowerBound[2] = lowerBound.z();
+			const openvdb::Coord& upperBound = gridBBox.max();
+			gridParams[gridName].upperBound[0] = upperBound.x();
+			gridParams[gridName].upperBound[1] = upperBound.y();
+			gridParams[gridName].upperBound[2] = upperBound.z();
+
+			gridParams[gridName].gridSizeX = upperBound.x(); //gridDimensions.x();
+			gridParams[gridName].gridSizeY = upperBound.y(); //gridDimensions.y();
+			gridParams[gridName].gridSizeZ = upperBound.z(); //gridDimensions.z();
 
 			gridParams[gridName].voxelSizeX = voxelSize.x();
 			gridParams[gridName].voxelSizeY = voxelSize.y();

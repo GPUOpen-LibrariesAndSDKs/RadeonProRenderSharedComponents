@@ -4,11 +4,23 @@
 class VDBGridSize
 {
 public:
-	VDBGridSize() : gridSizeX(0), gridSizeY(0), gridSizeZ(0), voxelSizeX(0.0), voxelSizeY(0.0), voxelSizeZ(0.0) {}
+	VDBGridSize() 
+		: gridSizeX(0)
+		, gridSizeY(0)
+		, gridSizeZ(0)
+		, voxelSizeX(0.0)
+		, voxelSizeY(0.0)
+		, voxelSizeZ(0.0)
+		, lowerBound{ 0, 0, 0 }
+		, upperBound{ 0, 0, 0 }
+	{}
 
 	size_t gridSizeX;
 	size_t gridSizeY;
 	size_t gridSizeZ;
+
+	size_t lowerBound[3];
+	size_t upperBound[3];
 
 	double voxelSizeX;
 	double voxelSizeY;
