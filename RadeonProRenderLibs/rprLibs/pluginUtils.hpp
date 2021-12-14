@@ -86,9 +86,9 @@ bool ProcessVDBGrid(
 	{
 		// for RPR negative voxel indices are invalid
 		openvdb::Coord curCoord = iter.getCoord();
-		openvdb::Int32 x = curCoord.x(); //- lowerBound.x();
-		openvdb::Int32 y = curCoord.y(); //- lowerBound.y();
-		openvdb::Int32 z = curCoord.z(); //- lowerBound.z();
+		openvdb::Int32 x = curCoord.x() - lowerBound.x();
+		openvdb::Int32 y = curCoord.y() - lowerBound.y();
+		openvdb::Int32 z = curCoord.z() - lowerBound.z();
 
 		gridOnIndices.push_back(x);
 		gridOnIndices.push_back(y);
@@ -186,9 +186,9 @@ std::tuple<bool, std::string> ReadFileGridToVDBGrid(
 			outGridData.size.upperBound[1] = upperBound.y();
 			outGridData.size.upperBound[2] = upperBound.z();
 
-			outGridData.size.gridSizeX = upperBound.x();//maxBBox.dim().x();
-			outGridData.size.gridSizeY = upperBound.y();//maxBBox.dim().y();
-			outGridData.size.gridSizeZ = upperBound.z();//maxBBox.dim().z();
+			outGridData.size.gridSizeX = upperBound.x() - lowerBound.x();
+			outGridData.size.gridSizeY = upperBound.y() - lowerBound.y();
+			outGridData.size.gridSizeZ = upperBound.z() - lowerBound.z();
 
 			// save voxel size
 			openvdb::math::Vec3d voxelSize = pBaseGrid->transform().voxelSize();
@@ -278,9 +278,9 @@ std::tuple<bool, std::string> ReadVolumeDataFromFile(
 			gridParams[gridName].upperBound[1] = upperBound.y();
 			gridParams[gridName].upperBound[2] = upperBound.z();
 
-			gridParams[gridName].gridSizeX = upperBound.x(); //gridDimensions.x();
-			gridParams[gridName].gridSizeY = upperBound.y(); //gridDimensions.y();
-			gridParams[gridName].gridSizeZ = upperBound.z(); //gridDimensions.z();
+			gridParams[gridName].gridSizeX = upperBound.x() - lowerBound.x();
+			gridParams[gridName].gridSizeY = upperBound.y() - lowerBound.y();
+			gridParams[gridName].gridSizeZ = upperBound.z() - lowerBound.z();
 
 			gridParams[gridName].voxelSizeX = voxelSize.x();
 			gridParams[gridName].voxelSizeY = voxelSize.y();
