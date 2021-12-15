@@ -268,6 +268,11 @@ std::tuple<bool, std::string> ReadVolumeDataFromFile(
 			openvdb::Coord gridDimensions = baseGrid->evalActiveVoxelDim();
 			openvdb::math::Vec3d voxelSize = baseGrid->transform().voxelSize();
 
+			if ((gridDimensions.x() == 0) || (gridDimensions.y() == 0) || (gridDimensions.z() == 0))
+			{
+				continue;
+			}
+
 			openvdb::CoordBBox gridBBox = baseGrid->evalActiveVoxelBoundingBox();
 			const openvdb::Coord& lowerBound = gridBBox.min();
 			gridParams[gridName].lowerBound[0] = lowerBound.x();
