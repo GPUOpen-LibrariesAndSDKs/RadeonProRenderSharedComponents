@@ -6,13 +6,11 @@
 #ifndef OPENVDB_PLATFORM_HAS_BEEN_INCLUDED
 #define OPENVDB_PLATFORM_HAS_BEEN_INCLUDED
 
-#include "PlatformConfig.h"
-
 #define PRAGMA(x) _Pragma(#x)
 
 /// @name Utilities
 /// @{
-/// @cond OPENVDB_VERSION_INTERNAL
+/// @cond OPENVDB_DOCS_INTERNAL
 #define OPENVDB_PREPROC_STRINGIFY_(x) #x
 /// @endcond
 /// @brief Return @a x as a string literal.  If @a x is a macro,
@@ -20,7 +18,7 @@
 /// @hideinitializer
 #define OPENVDB_PREPROC_STRINGIFY(x) OPENVDB_PREPROC_STRINGIFY_(x)
 
-/// @cond OPENVDB_VERSION_INTERNAL
+/// @cond OPENVDB_DOCS_INTERNAL
 #define OPENVDB_PREPROC_CONCAT_(x, y) x ## y
 /// @endcond
 /// @brief Form a new token by concatenating two existing tokens.
@@ -28,19 +26,6 @@
 /// @hideinitializer
 #define OPENVDB_PREPROC_CONCAT(x, y) OPENVDB_PREPROC_CONCAT_(x, y)
 /// @}
-
-
-/// Use OPENVDB_DEPRECATED to mark functions as deprecated.
-/// It should be placed right before the signature of the function,
-/// e.g., "OPENVDB_DEPRECATED void functionName();".
-#ifdef OPENVDB_DEPRECATED
-#undef OPENVDB_DEPRECATED
-#endif
-#ifdef _MSC_VER
-    #define OPENVDB_DEPRECATED  __declspec(deprecated)
-#else
-    #define OPENVDB_DEPRECATED  __attribute__ ((deprecated))
-#endif
 
 /// Macro for determining if GCC version is >= than X.Y
 #if defined(__GNUC__)
@@ -52,15 +37,6 @@
 
 /// OpenVDB now requires C++11
 #define OPENVDB_HAS_CXX11 1
-
-/// For compilers that need templated function specializations to have
-/// storage qualifiers, we need to declare the specializations as static inline.
-/// Otherwise, we'll get linker errors about multiply defined symbols.
-#if defined(__GNUC__) && OPENVDB_CHECK_GCC(4, 4)
-    #define OPENVDB_STATIC_SPECIALIZATION
-#else
-    #define OPENVDB_STATIC_SPECIALIZATION static
-#endif
 
 
 /// SIMD Intrinsic Headers
@@ -76,6 +52,31 @@
     #endif
 #endif
 
+/// Windows defines
+#ifdef _WIN32
+    // Math constants are not included in <cmath> unless _USE_MATH_DEFINES is
+    // defined on MSVC
+    // https://docs.microsoft.com/en-us/cpp/c-runtime-library/math-constants
+    #ifndef _USE_MATH_DEFINES
+        #define _USE_MATH_DEFINES
+    #endif
+    ///Disable the non-portable Windows definitions of min() and max() macros
+    #ifndef NOMINMAX
+        #define NOMINMAX
+    #endif
+
+    // By default, assume we're building OpenVDB as a DLL if we're dynamically
+    // linking in the CRT, unless OPENVDB_STATICLIB is defined.
+    #if defined(_DLL) && !defined(OPENVDB_STATICLIB) && !defined(OPENVDB_DLL)
+        #define OPENVDB_DLL
+    #endif
+
+    // By default, assume that we're dynamically linking OpenEXR, unless
+    // OPENVDB_OPENEXR_STATICLIB is defined.
+    #if !defined(OPENVDB_OPENEXR_STATICLIB) && !defined(OPENEXR_DLL)
+        #define OPENEXR_DLL
+    #endif
+#endif
 
 /// Bracket code with OPENVDB_NO_UNREACHABLE_CODE_WARNING_BEGIN/_END,
 /// as in the following example, to inhibit ICC remarks about unreachable code:
@@ -115,6 +116,15 @@
     #define OPENVDB_NO_UNREACHABLE_CODE_WARNING_END
 #endif
 
+/// Deprecation macros. Define OPENVDB_NO_DEPRECATION_WARNINGS to disable all
+/// deprecation warnings in OpenVDB.
+#ifndef OPENVDB_NO_DEPRECATION_WARNINGS
+#define OPENVDB_DEPRECATED [[deprecated]]
+#define OPENVDB_DEPRECATED_MESSAGE(msg) [[deprecated(msg)]]
+#else
+#define OPENVDB_DEPRECATED
+#define OPENVDB_DEPRECATED_MESSAGE(msg)
+#endif
 
 /// @brief Bracket code with OPENVDB_NO_DEPRECATION_WARNING_BEGIN/_END,
 /// to inhibit warnings about deprecated code.
@@ -218,6 +228,20 @@
     #endif
 #endif
 
+/// Helper macros for explicit template instantiation
+#if defined(_WIN32) && defined(OPENVDB_DLL)
+    #ifdef OPENVDB_PRIVATE
+        #define OPENVDB_TEMPLATE_EXPORT OPENVDB_EXPORT
+        #define OPENVDB_TEMPLATE_IMPORT
+    #else
+        #define OPENVDB_TEMPLATE_EXPORT
+        #define OPENVDB_TEMPLATE_IMPORT OPENVDB_IMPORT
+    #endif
+#else
+    #define OPENVDB_TEMPLATE_IMPORT
+    #define OPENVDB_TEMPLATE_EXPORT
+#endif
+
 /// All classes and public free standing functions must be explicitly marked
 /// as \<lib\>_API to be exported. The \<lib\>_PRIVATE macros are defined when
 /// building that particular library.
@@ -237,5 +261,55 @@
 #else
     #define OPENVDB_HOUDINI_API OPENVDB_IMPORT
 #endif
+
+#if defined(__ICC)
+
+// Use these defines to bracket a region of code that has safe static accesses.
+// Keep the region as small as possible.
+#define OPENVDB_START_THREADSAFE_STATIC_REFERENCE   __pragma(warning(disable:1710))
+#define OPENVDB_FINISH_THREADSAFE_STATIC_REFERENCE  __pragma(warning(default:1710))
+#define OPENVDB_START_THREADSAFE_STATIC_WRITE       __pragma(warning(disable:1711))
+#define OPENVDB_FINISH_THREADSAFE_STATIC_WRITE      __pragma(warning(default:1711))
+#define OPENVDB_START_THREADSAFE_STATIC_ADDRESS     __pragma(warning(disable:1712))
+#define OPENVDB_FINISH_THREADSAFE_STATIC_ADDRESS    __pragma(warning(default:1712))
+
+// Use these defines to bracket a region of code that has unsafe static accesses.
+// Keep the region as small as possible.
+#define OPENVDB_START_NON_THREADSAFE_STATIC_REFERENCE   __pragma(warning(disable:1710))
+#define OPENVDB_FINISH_NON_THREADSAFE_STATIC_REFERENCE  __pragma(warning(default:1710))
+#define OPENVDB_START_NON_THREADSAFE_STATIC_WRITE       __pragma(warning(disable:1711))
+#define OPENVDB_FINISH_NON_THREADSAFE_STATIC_WRITE      __pragma(warning(default:1711))
+#define OPENVDB_START_NON_THREADSAFE_STATIC_ADDRESS     __pragma(warning(disable:1712))
+#define OPENVDB_FINISH_NON_THREADSAFE_STATIC_ADDRESS    __pragma(warning(default:1712))
+
+// Simpler version for one-line cases
+#define OPENVDB_THREADSAFE_STATIC_REFERENCE(CODE) \
+    __pragma(warning(disable:1710)); CODE; __pragma(warning(default:1710))
+#define OPENVDB_THREADSAFE_STATIC_WRITE(CODE) \
+    __pragma(warning(disable:1711)); CODE; __pragma(warning(default:1711))
+#define OPENVDB_THREADSAFE_STATIC_ADDRESS(CODE) \
+    __pragma(warning(disable:1712)); CODE; __pragma(warning(default:1712))
+
+#else // GCC does not support these compiler warnings
+
+#define OPENVDB_START_THREADSAFE_STATIC_REFERENCE
+#define OPENVDB_FINISH_THREADSAFE_STATIC_REFERENCE
+#define OPENVDB_START_THREADSAFE_STATIC_WRITE
+#define OPENVDB_FINISH_THREADSAFE_STATIC_WRITE
+#define OPENVDB_START_THREADSAFE_STATIC_ADDRESS
+#define OPENVDB_FINISH_THREADSAFE_STATIC_ADDRESS
+
+#define OPENVDB_START_NON_THREADSAFE_STATIC_REFERENCE
+#define OPENVDB_FINISH_NON_THREADSAFE_STATIC_REFERENCE
+#define OPENVDB_START_NON_THREADSAFE_STATIC_WRITE
+#define OPENVDB_FINISH_NON_THREADSAFE_STATIC_WRITE
+#define OPENVDB_START_NON_THREADSAFE_STATIC_ADDRESS
+#define OPENVDB_FINISH_NON_THREADSAFE_STATIC_ADDRESS
+
+#define OPENVDB_THREADSAFE_STATIC_REFERENCE(CODE) CODE
+#define OPENVDB_THREADSAFE_STATIC_WRITE(CODE) CODE
+#define OPENVDB_THREADSAFE_STATIC_ADDRESS(CODE) CODE
+
+#endif // defined(__ICC)
 
 #endif // OPENVDB_PLATFORM_HAS_BEEN_INCLUDED

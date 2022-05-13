@@ -42,7 +42,7 @@ struct Default
 /// @param type               the type of the attibute.
 /// @param strideOrTotalSize  the stride of the attribute
 /// @param constantStride     if @c false, stride is interpreted as total size of the array
-/// @param metaDefaultValue   metadata default attribute value
+/// @param defaultValue       metadata default attribute value
 /// @param hidden             mark attribute as hidden
 /// @param transient          mark attribute as transient
 template <typename PointDataTreeT>
@@ -51,7 +51,7 @@ inline void appendAttribute(PointDataTreeT& tree,
                             const NamePair& type,
                             const Index strideOrTotalSize = 1,
                             const bool constantStride = true,
-                            Metadata::Ptr metaDefaultValue = Metadata::Ptr(),
+                            const Metadata* defaultValue = nullptr,
                             const bool hidden = false,
                             const bool transient = false);
 
@@ -62,19 +62,19 @@ inline void appendAttribute(PointDataTreeT& tree,
 /// @param uniformValue       the initial value of the attribute
 /// @param strideOrTotalSize  the stride of the attribute
 /// @param constantStride     if @c false, stride is interpreted as total size of the array
-/// @param metaDefaultValue   metadata default attribute value
+/// @param defaultValue       metadata default attribute value
 /// @param hidden             mark attribute as hidden
 /// @param transient          mark attribute as transient
 template <typename ValueType,
           typename CodecType = NullCodec,
-          typename PointDataTreeT = PointDataTree>
+          typename PointDataTreeT>
 inline void appendAttribute(PointDataTreeT& tree,
                             const std::string& name,
                             const ValueType& uniformValue =
                                 point_attribute_internal::Default<ValueType>::value(),
                             const Index strideOrTotalSize = 1,
                             const bool constantStride = true,
-                            Metadata::Ptr metaDefaultValue = Metadata::Ptr(),
+                            const TypedMetadata<ValueType>* defaultValue = nullptr,
                             const bool hidden = false,
                             const bool transient = false);
 
@@ -156,6 +156,7 @@ inline void compactAttributes(PointDataTreeT& tree);
 
 ////////////////////////////////////////
 
+/// @cond OPENVDB_DOCS_INTERNAL
 
 namespace point_attribute_internal {
 
@@ -234,6 +235,8 @@ struct MetadataStorage<PointDataTreeT, Name>
 
 } // namespace point_attribute_internal
 
+/// @endcond
+
 
 ////////////////////////////////////////
 
@@ -244,7 +247,7 @@ inline void appendAttribute(PointDataTreeT& tree,
                             const NamePair& type,
                             const Index strideOrTotalSize,
                             const bool constantStride,
-                            Metadata::Ptr metaDefaultValue,
+                            const Metadata* defaultValue,
                             const bool hidden,
                             const bool transient)
 {
@@ -268,8 +271,8 @@ inline void appendAttribute(PointDataTreeT& tree,
 
     // store the attribute default value in the descriptor metadata
 
-    if (metaDefaultValue) {
-        newDescriptor->setDefaultValue(name, *metaDefaultValue);
+    if (defaultValue) {
+        newDescriptor->setDefaultValue(name, *defaultValue);
     }
 
     // extract new pos
@@ -284,11 +287,12 @@ inline void appendAttribute(PointDataTreeT& tree,
 
     tree::LeafManager<PointDataTreeT> leafManager(tree);
     leafManager.foreach(
-        [&](typename PointDataTree::LeafNodeType& leaf, size_t /*idx*/) {
+        [&](typename PointDataTreeT::LeafNodeType& leaf, size_t /*idx*/) {
             auto expected = leaf.attributeSet().descriptorPtr();
 
             auto attribute = leaf.appendAttribute(*expected, newDescriptor,
-                pos, strideOrTotalSize, constantStride, &lock);
+                pos, strideOrTotalSize, constantStride, defaultValue,
+                &lock);
 
             if (hidden)     attribute->setHidden(true);
             if (transient)  attribute->setTransient(true);
@@ -306,7 +310,7 @@ inline void appendAttribute(PointDataTreeT& tree,
                             const ValueType& uniformValue,
                             const Index strideOrTotalSize,
                             const bool constantStride,
-                            Metadata::Ptr metaDefaultValue,
+                            const TypedMetadata<ValueType>* defaultValue,
                             const bool hidden,
                             const bool transient)
 {
@@ -318,9 +322,15 @@ inline void appendAttribute(PointDataTreeT& tree,
     using point_attribute_internal::MetadataStorage;
 
     appendAttribute(tree, name, AttributeTypeConversion<ValueType, CodecType>::type(),
-        strideOrTotalSize, constantStride, metaDefaultValue, hidden, transient);
+        strideOrTotalSize, constantStride, defaultValue, hidden, transient);
 
-    if (!math::isExactlyEqual(uniformValue, Default<ValueType>::value())) {
+    // if the uniform value is equal to either the default value provided
+    // through the metadata argument or the default value for this value type,
+    // it is not necessary to perform the collapse
+
+    const bool uniformIsDefault = math::isExactlyEqual(uniformValue,
+            bool(defaultValue) ? defaultValue->value() : Default<ValueType>::value());
+    if (!uniformIsDefault) {
         MetadataStorage<PointDataTreeT, ValueType>::add(tree, uniformValue);
         collapseAttribute<ValueType>(tree, name, uniformValue);
     }
@@ -353,7 +363,7 @@ inline void collapseAttribute(  PointDataTreeT& tree,
 
     tree::LeafManager<PointDataTreeT> leafManager(tree);
     leafManager.foreach(
-        [&](typename PointDataTree::LeafNodeType& leaf, size_t /*idx*/) {
+        [&](typename PointDataTreeT::LeafNodeType& leaf, size_t /*idx*/) {
             assert(leaf.hasAttribute(index));
             AttributeArray& array = leaf.attributeArray(index);
             point_attribute_internal::collapseAttribute(
@@ -390,7 +400,7 @@ inline void dropAttributes( PointDataTreeT& tree,
 
     tree::LeafManager<PointDataTreeT> leafManager(tree);
     leafManager.foreach(
-        [&](typename PointDataTree::LeafNodeType& leaf, size_t /*idx*/) {
+        [&](typename PointDataTreeT::LeafNodeType& leaf, size_t /*idx*/) {
             auto expected = leaf.attributeSet().descriptorPtr();
             leaf.dropAttributes(indices, *expected, newDescriptor);
         }, /*threaded=*/true
@@ -521,21 +531,10 @@ inline void compactAttributes(PointDataTreeT& tree)
 
     tree::LeafManager<PointDataTreeT> leafManager(tree);
     leafManager.foreach(
-        [&](typename PointDataTree::LeafNodeType& leaf, size_t /*idx*/) {
+        [&](typename PointDataTreeT::LeafNodeType& leaf, size_t /*idx*/) {
             leaf.compactAttributes();
         }, /*threaded=*/ true
     );
-}
-
-
-////////////////////////////////////////
-
-
-template <typename PointDataTreeT>
-OPENVDB_DEPRECATED inline void bloscCompressAttribute(  PointDataTreeT&,
-                                                        const Name&)
-{
-    // in-memory compression is no longer supported
 }
 
 

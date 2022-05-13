@@ -38,6 +38,7 @@
 #include "Prune.h"
 #include "SignedFloodFill.h"
 #include "ValueTransformer.h"
+#include <openvdb/openvdb.h>
 
 #include <tbb/blocked_range.h>
 #include <tbb/enumerable_thread_specific.h>
@@ -692,7 +693,7 @@ struct MultiResGrid<TreeType>::MaskOp
         // Create Mask of restruction performed on fineTree
         MaskT mask(fineTree, false, true, TopologyCopy() );
 
-        // Muli-threaded dilation which also linearizes the tree to leaf nodes
+        // Multi-threaded dilation which also linearizes the tree to leaf nodes
         tools::dilateActiveValues(mask, 1, NN_FACE_EDGE_VERTEX, EXPAND_TILES);
 
         // Restriction by injection using thread-local storage of coarse tree masks
@@ -795,7 +796,7 @@ struct MultiResGrid<TreeType>::FractionOp
     void operator()(const tbb::blocked_range<PoolIterT>& range) const
     {
         for (PoolIterT it=range.begin(); it!=range.end(); ++it) {
-            tools::dilateVoxels( *it, 1, NN_FACE_EDGE_VERTEX);
+            tools::dilateActiveValues(*it, 1, tools::NN_FACE_EDGE_VERTEX, tools::IGNORE_TILES);
         }
     }
     void operator()(const Range2 &r) const
@@ -943,6 +944,24 @@ struct MultiResGrid<TreeType>::ProlongateOp
         return ValueType(0.125) * v;
     }
 };// ProlongateOp
+
+
+////////////////////////////////////////
+
+
+// Explicit Template Instantiation
+
+#ifdef OPENVDB_USE_EXPLICIT_INSTANTIATION
+
+#ifdef OPENVDB_INSTANTIATE_MULTIRESGRID
+#include <openvdb/util/ExplicitInstantiation.h>
+#endif
+
+OPENVDB_INSTANTIATE_CLASS MultiResGrid<FloatTree>;
+OPENVDB_INSTANTIATE_CLASS MultiResGrid<DoubleTree>;
+
+#endif // OPENVDB_USE_EXPLICIT_INSTANTIATION
+
 
 } // namespace tools
 } // namespace OPENVDB_VERSION_NAME

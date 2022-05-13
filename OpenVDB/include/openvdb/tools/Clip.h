@@ -13,6 +13,7 @@
 #include <openvdb/math/Math.h> // for math::isNegative()
 #include <openvdb/math/Maps.h> // for math::NonlinearFrustumMap
 #include <openvdb/tree/LeafManager.h>
+#include <openvdb/points/PointDataGrid.h>
 #include "GridTransformer.h" // for tools::resampleToMatch()
 #include "Prune.h"
 #include <tbb/blocked_range.h>
@@ -35,7 +36,7 @@ namespace tools {
 /// @warning Clipping a level set will likely produce a grid that is
 /// no longer a valid level set.
 template<typename GridType>
-inline typename GridType::Ptr
+typename GridType::Ptr
 clip(const GridType& grid, const BBoxd& bbox, bool keepInterior = true);
 
 /// @brief Clip the given grid against a frustum and return a new grid containing the result.
@@ -46,7 +47,7 @@ clip(const GridType& grid, const BBoxd& bbox, bool keepInterior = true);
 /// @warning Clipping a level set will likely produce a grid that is
 /// no longer a valid level set.
 template<typename GridType>
-inline typename GridType::Ptr
+typename GridType::Ptr
 clip(const GridType& grid, const math::NonlinearFrustumMap& frustum, bool keepInterior = true);
 
 /// @brief Clip a grid against the active voxels of another grid
@@ -62,12 +63,13 @@ clip(const GridType& grid, const math::NonlinearFrustumMap& frustum, bool keepIn
 /// @warning Clipping a level set will likely produce a grid that is
 /// no longer a valid level set.
 template<typename GridType, typename MaskTreeType>
-inline typename GridType::Ptr
+typename GridType::Ptr
 clip(const GridType& grid, const Grid<MaskTreeType>& mask, bool keepInterior = true);
 
 
 ////////////////////////////////////////
 
+/// @cond OPENVDB_DOCS_INTERNAL
 
 namespace clip_internal {
 
@@ -240,7 +242,7 @@ struct ConvertGrid<GridT, GridT>
 // and return a pointer to the new grid.
 /// @private
 template<typename GridT>
-inline typename std::enable_if<!std::is_same<MaskValueType, typename GridT::BuildType>::value,
+typename std::enable_if<!std::is_same<MaskValueType, typename GridT::BuildType>::value,
     typename GridT::template ValueConverter<MaskValueType>::Type::Ptr>::type
 convertToMaskGrid(const GridT& grid)
 {
@@ -254,7 +256,7 @@ convertToMaskGrid(const GridT& grid)
 // Overload that avoids any processing if the input grid is already a mask grid
 /// @private
 template<typename GridT>
-inline typename std::enable_if<std::is_same<MaskValueType, typename GridT::BuildType>::value,
+typename std::enable_if<std::is_same<MaskValueType, typename GridT::BuildType>::value,
     typename GridT::ConstPtr>::type
 convertToMaskGrid(const GridT& grid)
 {
@@ -267,7 +269,7 @@ convertToMaskGrid(const GridT& grid)
 
 /// @private
 template<typename GridType>
-inline typename GridType::Ptr
+typename GridType::Ptr
 doClip(
     const GridType& grid,
     const typename GridType::template ValueConverter<MaskValueType>::Type& clipMask,
@@ -338,13 +340,15 @@ doClip(
 
 } // namespace clip_internal
 
+/// @endcond
+
 
 ////////////////////////////////////////
 
 
 /// @private
 template<typename GridType>
-inline typename GridType::Ptr
+typename GridType::Ptr
 clip(const GridType& grid, const BBoxd& bbox, bool keepInterior)
 {
     using MaskValueT = clip_internal::MaskValueType;
@@ -365,7 +369,7 @@ clip(const GridType& grid, const BBoxd& bbox, bool keepInterior)
 
 /// @private
 template<typename SrcGridType, typename ClipTreeType>
-inline typename SrcGridType::Ptr
+typename SrcGridType::Ptr
 clip(const SrcGridType& srcGrid, const Grid<ClipTreeType>& clipGrid, bool keepInterior)
 {
     using MaskValueT = clip_internal::MaskValueType;
@@ -396,7 +400,7 @@ clip(const SrcGridType& srcGrid, const Grid<ClipTreeType>& clipGrid, bool keepIn
 
 /// @private
 template<typename GridType>
-inline typename GridType::Ptr
+typename GridType::Ptr
 clip(const GridType& inGrid, const math::NonlinearFrustumMap& frustumMap, bool keepInterior)
 {
     using ValueT = typename GridType::ValueType;
@@ -559,6 +563,36 @@ clip(const GridType& inGrid, const math::NonlinearFrustumMap& frustumMap, bool k
 
     return outGrid;
 }
+
+
+////////////////////////////////////////
+
+
+// Explicit Template Instantiation
+
+#ifdef OPENVDB_USE_EXPLICIT_INSTANTIATION
+
+#ifdef OPENVDB_INSTANTIATE_CLIP
+#include <openvdb/util/ExplicitInstantiation.h>
+#endif
+
+#define _FUNCTION(TreeT) \
+    Grid<TreeT>::Ptr clip(const Grid<TreeT>&, const BBoxd&, bool)
+OPENVDB_VOLUME_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#define _FUNCTION(TreeT) \
+    Grid<TreeT>::Ptr clip(const Grid<TreeT>&, const math::NonlinearFrustumMap&, bool)
+OPENVDB_ALL_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#define _FUNCTION(TreeT) \
+    Grid<TreeT>::Ptr clip_internal::doClip(const Grid<TreeT>&, const MaskGrid&, bool)
+OPENVDB_VOLUME_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#endif // OPENVDB_USE_EXPLICIT_INSTANTIATION
+
 
 } // namespace tools
 } // namespace OPENVDB_VERSION_NAME

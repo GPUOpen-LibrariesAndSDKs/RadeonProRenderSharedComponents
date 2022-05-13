@@ -30,10 +30,6 @@
 #include <utility> // std::pair, std::make_pair
 #include <vector>
 
-#include <boost/mpl/vector.hpp>//for boost::mpl::vector
-#include <boost/mpl/push_back.hpp>
-#include <boost/mpl/back.hpp>
-
 class TestPointDataLeaf;
 
 namespace openvdb {
@@ -184,6 +180,11 @@ namespace points {
 // forward declaration
 template<typename T, Index Log2Dim> class PointDataLeafNode;
 
+// these aliases are disabled in one of the unit tests to ensure that
+// they are not used by the Point headers
+
+#ifndef OPENVDB_DISABLE_POINT_DATA_TREE_ALIAS
+
 /// @brief Point index tree configured to match the default VDB configurations.
 using PointDataTree = tree::Tree<tree::RootNode<tree::InternalNode<tree::InternalNode
     <PointDataLeafNode<PointDataIndex32, 3>, 4>, 5>>>;
@@ -192,6 +193,7 @@ using PointDataTree = tree::Tree<tree::RootNode<tree::InternalNode<tree::Interna
 /// @brief Point data grid.
 using PointDataGrid = Grid<PointDataTree>;
 
+#endif
 
 /// @brief  Deep copy the descriptor across all leaf nodes.
 ///
@@ -319,6 +321,9 @@ public:
     /// Retrieve the attribute set.
     const AttributeSet& attributeSet() const { return *mAttributeSet; }
 
+    /// @brief Steal the attribute set, a new, empty attribute set is inserted in it's place.
+    AttributeSet::UniquePtr stealAttributeSet();
+
     /// @brief Create a new attribute set. Existing attributes will be removed.
     void initializeAttributes(const Descriptor::Ptr& descriptor, const Index arrayLength,
         const AttributeArray::ScopedRegistryLock* lock = nullptr);
@@ -339,10 +344,12 @@ public:
     /// @param pos Index of the new attribute in the descriptor replacement.
     /// @param strideOrTotalSize Stride of the attribute array (if constantStride), total size otherwise
     /// @param constantStride if @c false, stride is interpreted as total size of the array
+    /// @param metadata optional default value metadata
     /// @param lock an optional scoped registry lock to avoid contention
     AttributeArray::Ptr appendAttribute(const Descriptor& expected, Descriptor::Ptr& replacement,
                                         const size_t pos, const Index strideOrTotalSize = 1,
                                         const bool constantStride = true,
+                                        const Metadata* metadata = nullptr,
                                         const AttributeArray::ScopedRegistryLock* lock = nullptr);
 
     /// @brief Drop list of attributes.
@@ -590,7 +597,7 @@ public:
     using ValueAll  = typename BaseLeaf::ValueAll;
 
 private:
-    std::unique_ptr<AttributeSet> mAttributeSet;
+    AttributeSet::UniquePtr mAttributeSet;
     uint16_t mVoxelBufferSize = 0;
 
 protected:
@@ -616,32 +623,6 @@ public:
 
 public:
 
-#if defined(_MSC_VER) && (_MSC_VER < 1914)
-    using ValueOnIter = typename BaseLeaf::ValueIter<
-        MaskOnIterator, PointDataLeafNode, const ValueType, ValueOn>;
-    using ValueOnCIter = typename BaseLeaf::ValueIter<
-        MaskOnIterator, const PointDataLeafNode, const ValueType, ValueOn>;
-    using ValueOffIter = typename BaseLeaf::ValueIter<
-        MaskOffIterator, PointDataLeafNode, const ValueType, ValueOff>;
-    using ValueOffCIter = typename BaseLeaf::ValueIter<
-        MaskOffIterator,const PointDataLeafNode,const ValueType,ValueOff>;
-    using ValueAllIter = typename BaseLeaf::ValueIter<
-        MaskDenseIterator, PointDataLeafNode, const ValueType, ValueAll>;
-    using ValueAllCIter = typename BaseLeaf::ValueIter<
-        MaskDenseIterator,const PointDataLeafNode,const ValueType,ValueAll>;
-    using ChildOnIter = typename BaseLeaf::ChildIter<
-        MaskOnIterator, PointDataLeafNode, ChildOn>;
-    using ChildOnCIter = typename BaseLeaf::ChildIter<
-        MaskOnIterator, const PointDataLeafNode, ChildOn>;
-    using ChildOffIter = typename BaseLeaf::ChildIter<
-        MaskOffIterator, PointDataLeafNode, ChildOff>;
-    using ChildOffCIter = typename BaseLeaf::ChildIter<
-        MaskOffIterator, const PointDataLeafNode, ChildOff>;
-    using ChildAllIter = typename BaseLeaf::DenseIter<
-        PointDataLeafNode, ValueType, ChildAll>;
-    using ChildAllCIter = typename BaseLeaf::DenseIter<
-        const PointDataLeafNode, const ValueType, ChildAll>;
-#else
     using ValueOnIter = typename BaseLeaf::template ValueIter<
         MaskOnIterator, PointDataLeafNode, const ValueType, ValueOn>;
     using ValueOnCIter = typename BaseLeaf::template ValueIter<
@@ -666,7 +647,6 @@ public:
         PointDataLeafNode, ValueType, ChildAll>;
     using ChildAllCIter = typename BaseLeaf::template DenseIter<
         const PointDataLeafNode, const ValueType, ChildAll>;
-#endif
 
     using IndexVoxelIter    = IndexIter<ValueVoxelCIter, NullFilter>;
     using IndexAllIter      = IndexIter<ValueAllCIter, NullFilter>;
@@ -765,6 +745,15 @@ public:
 // PointDataLeafNode implementation
 
 template<typename T, Index Log2Dim>
+inline AttributeSet::UniquePtr
+PointDataLeafNode<T, Log2Dim>::stealAttributeSet()
+{
+    AttributeSet::UniquePtr ptr = std::make_unique<AttributeSet>();
+    std::swap(ptr, mAttributeSet);
+    return ptr;
+}
+
+template<typename T, Index Log2Dim>
 inline void
 PointDataLeafNode<T, Log2Dim>::initializeAttributes(const Descriptor::Ptr& descriptor, const Index arrayLength,
     const AttributeArray::ScopedRegistryLock* lock)
@@ -815,10 +804,11 @@ inline AttributeArray::Ptr
 PointDataLeafNode<T, Log2Dim>::appendAttribute( const Descriptor& expected, Descriptor::Ptr& replacement,
                                                 const size_t pos, const Index strideOrTotalSize,
                                                 const bool constantStride,
+                                                const Metadata* metadata,
                                                 const AttributeArray::ScopedRegistryLock* lock)
 {
     return mAttributeSet->appendAttribute(
-        expected, replacement, pos, strideOrTotalSize, constantStride, lock);
+        expected, replacement, pos, strideOrTotalSize, constantStride, metadata, lock);
 }
 
 template<typename T, Index Log2Dim>
@@ -1669,16 +1659,16 @@ void initialize();
 void uninitialize();
 
 
-/// @brief Recursive node chain which generates a boost::mpl::vector listing
-/// value converted types of nodes to PointDataGrid nodes of the same configuration,
+/// @brief Recursive node chain which generates a openvdb::TypeList value
+/// converted types of nodes to PointDataGrid nodes of the same configuration,
 /// rooted at RootNodeType in reverse order, from LeafNode to RootNode.
 /// See also TreeConverter<>.
 template<typename HeadT, int HeadLevel>
 struct PointDataNodeChain
 {
     using SubtreeT = typename PointDataNodeChain<typename HeadT::ChildNodeType, HeadLevel-1>::Type;
-    using RootNodeT = tree::RootNode<typename boost::mpl::back<SubtreeT>::type>;
-    using Type = typename boost::mpl::push_back<SubtreeT, RootNodeT>::type;
+    using RootNodeT = tree::RootNode<typename SubtreeT::Back>;
+    using Type = typename SubtreeT::template Append<RootNodeT>;
 };
 
 // Specialization for internal nodes which require their embedded child type to
@@ -1687,8 +1677,8 @@ template <typename ChildT, Index Log2Dim, int HeadLevel>
 struct PointDataNodeChain<tree::InternalNode<ChildT, Log2Dim>, HeadLevel>
 {
     using SubtreeT = typename PointDataNodeChain<ChildT, HeadLevel-1>::Type;
-    using InternalNodeT = tree::InternalNode<typename boost::mpl::back<SubtreeT>::type, Log2Dim>;
-    using Type = typename boost::mpl::push_back<SubtreeT, InternalNodeT>::type;
+    using InternalNodeT = tree::InternalNode<typename SubtreeT::Back, Log2Dim>;
+    using Type = typename SubtreeT::template Append<InternalNodeT>;
 };
 
 // Specialization for the last internal node of a node chain, expected
@@ -1698,7 +1688,7 @@ struct PointDataNodeChain<tree::InternalNode<ChildT, Log2Dim>, /*HeadLevel=*/1>
 {
     using LeafNodeT = PointDataLeafNode<PointDataIndex32, ChildT::LOG2DIM>;
     using InternalNodeT = tree::InternalNode<LeafNodeT, Log2Dim>;
-    using Type = typename boost::mpl::vector<LeafNodeT, InternalNodeT>::type;
+    using Type = TypeList<LeafNodeT, InternalNodeT>;
 };
 
 } // namespace internal
@@ -1711,7 +1701,7 @@ template <typename TreeType>
 struct TreeConverter {
     using RootNodeT = typename TreeType::RootNodeType;
     using NodeChainT = typename internal::PointDataNodeChain<RootNodeT, RootNodeT::LEVEL>::Type;
-    using Type = tree::Tree<typename boost::mpl::back<NodeChainT>::type>;
+    using Type = tree::Tree<typename NodeChainT::Back>;
 };
 
 

@@ -15,8 +15,9 @@
 #include "GridOperators.h"
 #include "GridTransformer.h"
 #include "Mask.h" // interiorMask
-#include "Morphology.h" // dilateVoxels, erodeVoxels
+#include "Morphology.h" // erodeActiveValues
 #include "PoissonSolver.h"
+#include <openvdb/openvdb.h>
 
 
 namespace openvdb {
@@ -40,7 +41,7 @@ struct VectorToScalarGrid {
 /// @param grid         source grid to use for computing the mask
 /// @param dilation     dilation in voxels of the source grid to form the new potential flow mask
 template<typename GridT, typename MaskT = typename GridT::template ValueConverter<ValueMask>::Type>
-inline typename MaskT::Ptr
+typename MaskT::Ptr
 createPotentialFlowMask(const GridT& grid, int dilation = 5);
 
 
@@ -54,7 +55,7 @@ createPotentialFlowMask(const GridT& grid, int dilation = 5);
 /// around the collider by supplying an empty boundary Velocity and a
 /// non-zero background velocity.
 template<typename Vec3T, typename GridT, typename MaskT>
-inline typename GridT::template ValueConverter<Vec3T>::Type::Ptr
+typename GridT::template ValueConverter<Vec3T>::Type::Ptr
 createPotentialFlowNeumannVelocities(const GridT& collider, const MaskT& domain,
     const typename GridT::template ValueConverter<Vec3T>::Type::ConstPtr boundaryVelocity,
     const Vec3T& backgroundVelocity);
@@ -72,7 +73,7 @@ createPotentialFlowNeumannVelocities(const GridT& collider, const MaskT& domain,
 /// (minimum error and maximum number of iterations); on output, it gives
 /// the actual termination conditions.
 template<typename Vec3GridT, typename MaskT, typename InterrupterT = util::NullInterrupter>
-inline typename VectorToScalarGrid<Vec3GridT>::Ptr
+typename VectorToScalarGrid<Vec3GridT>::Ptr
 computeScalarPotential(const MaskT& domain, const Vec3GridT& neumann, math::pcg::State& state,
     InterrupterT* interrupter = nullptr);
 
@@ -84,7 +85,7 @@ computeScalarPotential(const MaskT& domain, const Vec3GridT& neumann, math::pcg:
 ///                     values give the Neumann boundaries that should be applied there
 /// @param backgroundVelocity   a background velocity value
 template<typename Vec3GridT>
-inline typename Vec3GridT::Ptr
+typename Vec3GridT::Ptr
 computePotentialFlow(const typename VectorToScalarGrid<Vec3GridT>::Type& potential,
     const Vec3GridT& neumann,
     const typename Vec3GridT::ValueType backgroundVelocity =
@@ -93,6 +94,7 @@ computePotentialFlow(const typename VectorToScalarGrid<Vec3GridT>::Type& potenti
 
 //////////////////////////////////////////////////////////
 
+/// @cond OPENVDB_DOCS_INTERNAL
 
 namespace potential_flow_internal {
 
@@ -100,14 +102,15 @@ namespace potential_flow_internal {
 /// @private
 // helper function for retrieving a mask that comprises the outer-most layer of voxels
 template<typename GridT>
-inline typename GridT::TreeType::template ValueConverter<ValueMask>::Type::Ptr
+typename GridT::TreeType::template ValueConverter<ValueMask>::Type::Ptr
 extractOuterVoxelMask(GridT& inGrid)
 {
     using MaskTreeT = typename GridT::TreeType::template ValueConverter<ValueMask>::Type;
     typename MaskTreeT::Ptr interiorMask(new MaskTreeT(inGrid.tree(), false, TopologyCopy()));
     typename MaskTreeT::Ptr boundaryMask(new MaskTreeT(inGrid.tree(), false, TopologyCopy()));
 
-    erodeVoxels(*interiorMask, 1, NN_FACE);
+    tools::erodeActiveValues(*interiorMask, /*iterations=*/1, tools::NN_FACE, tools::IGNORE_TILES);
+    tools::pruneInactive(*interiorMask);
     boundaryMask->topologyDifference(*interiorMask);
     return boundaryMask;
 }
@@ -169,7 +172,7 @@ private:
 }; // struct ComputeNeumannVelocityOp
 
 
-// initalizes the boundary conditions for use in the Poisson Solver
+// initializes the boundary conditions for use in the Poisson Solver
 template<typename Vec3GridT, typename MaskT>
 struct SolveBoundaryOp
 {
@@ -204,11 +207,12 @@ struct SolveBoundaryOp
 
 } // namespace potential_flow_internal
 
+/// @endcond
 
 ////////////////////////////////////////////////////////////////////////////
 
 template<typename GridT, typename MaskT>
-inline typename MaskT::Ptr
+typename MaskT::Ptr
 createPotentialFlowMask(const GridT& grid, int dilation)
 {
     using MaskTreeT = typename MaskT::TreeType;
@@ -298,7 +302,7 @@ typename GridT::template ValueConverter<Vec3T>::Type::Ptr createPotentialFlowNeu
 
 
 template<typename Vec3GridT, typename MaskT, typename InterrupterT>
-inline typename VectorToScalarGrid<Vec3GridT>::Ptr
+typename VectorToScalarGrid<Vec3GridT>::Ptr
 computeScalarPotential(const MaskT& domain, const Vec3GridT& neumann,
     math::pcg::State& state, InterrupterT* interrupter)
 {
@@ -328,7 +332,7 @@ computeScalarPotential(const MaskT& domain, const Vec3GridT& neumann,
 
 
 template<typename Vec3GridT>
-inline typename Vec3GridT::Ptr
+typename Vec3GridT::Ptr
 computePotentialFlow(const typename VectorToScalarGrid<Vec3GridT>::Type& potential,
     const Vec3GridT& neumann,
     const typename Vec3GridT::ValueType backgroundVelocity)
@@ -387,6 +391,36 @@ computePotentialFlow(const typename VectorToScalarGrid<Vec3GridT>::Type& potenti
 
 
 ////////////////////////////////////////
+
+
+// Explicit Template Instantiation
+
+#ifdef OPENVDB_USE_EXPLICIT_INSTANTIATION
+
+#ifdef OPENVDB_INSTANTIATE_POTENTIALFLOW
+#include <openvdb/util/ExplicitInstantiation.h>
+#endif
+
+#define _FUNCTION(TreeT) \
+    Grid<TreeT>::Ptr createPotentialFlowNeumannVelocities(const FloatGrid&, const MaskGrid&, \
+        const Grid<TreeT>::ConstPtr, const TreeT::ValueType&)
+OPENVDB_VEC3_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#define _FUNCTION(TreeT) \
+    VectorToScalarGrid<Grid<TreeT>>::Ptr computeScalarPotential(const MaskGrid&, const Grid<TreeT>&, \
+        math::pcg::State&, util::NullInterrupter*)
+OPENVDB_VEC3_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#define _FUNCTION(TreeT) \
+    Grid<TreeT>::Ptr computePotentialFlow( \
+        const VectorToScalarGrid<Grid<TreeT>>::Type&, const Grid<TreeT>&, const TreeT::ValueType)
+OPENVDB_VEC3_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#endif // OPENVDB_USE_EXPLICIT_INSTANTIATION
+
 
 } // namespace tools
 } // namespace OPENVDB_VERSION_NAME

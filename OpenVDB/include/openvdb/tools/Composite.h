@@ -15,6 +15,8 @@
 #include <openvdb/Types.h>
 #include <openvdb/Grid.h>
 #include <openvdb/math/Math.h> // for isExactlyEqual()
+#include <openvdb/openvdb.h>
+#include "Merge.h"
 #include "ValueTransformer.h" // for transformValues()
 #include "Prune.h"// for prune
 #include "SignedFloodFill.h" // for signedFloodFill()
@@ -23,7 +25,6 @@
 #include <tbb/parallel_for.h>
 #include <tbb/parallel_reduce.h>
 #include <tbb/task_group.h>
-#include <tbb/task_scheduler_init.h>
 
 #include <type_traits>
 #include <functional>
@@ -36,59 +37,59 @@ namespace tools {
 /// @brief Given two level set grids, replace the A grid with the union of A and B.
 /// @throw ValueError if the background value of either grid is not greater than zero.
 /// @note This operation always leaves the B grid empty.
-template<typename GridOrTreeT> OPENVDB_STATIC_SPECIALIZATION
-inline void csgUnion(GridOrTreeT& a, GridOrTreeT& b, bool prune = true);
+template<typename GridOrTreeT>
+void csgUnion(GridOrTreeT& a, GridOrTreeT& b, bool prune = true);
 /// @brief Given two level set grids, replace the A grid with the intersection of A and B.
 /// @throw ValueError if the background value of either grid is not greater than zero.
 /// @note This operation always leaves the B grid empty.
-template<typename GridOrTreeT> OPENVDB_STATIC_SPECIALIZATION
-inline void csgIntersection(GridOrTreeT& a, GridOrTreeT& b, bool prune = true);
+template<typename GridOrTreeT>
+void csgIntersection(GridOrTreeT& a, GridOrTreeT& b, bool prune = true);
 /// @brief Given two level set grids, replace the A grid with the difference A / B.
 /// @throw ValueError if the background value of either grid is not greater than zero.
 /// @note This operation always leaves the B grid empty.
-template<typename GridOrTreeT> OPENVDB_STATIC_SPECIALIZATION
-inline void csgDifference(GridOrTreeT& a, GridOrTreeT& b, bool prune = true);
+template<typename GridOrTreeT>
+void csgDifference(GridOrTreeT& a, GridOrTreeT& b, bool prune = true);
 
 /// @brief  Threaded CSG union operation that produces a new grid or tree from
 ///         immutable inputs.
 /// @return The CSG union of the @a and @b level set inputs.
-template<typename GridOrTreeT> OPENVDB_STATIC_SPECIALIZATION
-inline typename GridOrTreeT::Ptr csgUnionCopy(const GridOrTreeT& a, const GridOrTreeT& b);
+template<typename GridOrTreeT>
+typename GridOrTreeT::Ptr csgUnionCopy(const GridOrTreeT& a, const GridOrTreeT& b);
 /// @brief  Threaded CSG intersection operation that produces a new grid or tree from
 ///         immutable inputs.
 /// @return The CSG intersection of the @a and @b level set inputs.
-template<typename GridOrTreeT> OPENVDB_STATIC_SPECIALIZATION
-inline typename GridOrTreeT::Ptr csgIntersectionCopy(const GridOrTreeT& a, const GridOrTreeT& b);
+template<typename GridOrTreeT>
+typename GridOrTreeT::Ptr csgIntersectionCopy(const GridOrTreeT& a, const GridOrTreeT& b);
 /// @brief  Threaded CSG difference operation that produces a new grid or tree from
 ///         immutable inputs.
 /// @return The CSG difference of the @a and @b level set inputs.
-template<typename GridOrTreeT> OPENVDB_STATIC_SPECIALIZATION
-inline typename GridOrTreeT::Ptr csgDifferenceCopy(const GridOrTreeT& a, const GridOrTreeT& b);
+template<typename GridOrTreeT>
+typename GridOrTreeT::Ptr csgDifferenceCopy(const GridOrTreeT& a, const GridOrTreeT& b);
 
 /// @brief Given grids A and B, compute max(a, b) per voxel (using sparse traversal).
 /// Store the result in the A grid and leave the B grid empty.
-template<typename GridOrTreeT> OPENVDB_STATIC_SPECIALIZATION
-inline void compMax(GridOrTreeT& a, GridOrTreeT& b);
+template<typename GridOrTreeT>
+void compMax(GridOrTreeT& a, GridOrTreeT& b);
 /// @brief Given grids A and B, compute min(a, b) per voxel (using sparse traversal).
 /// Store the result in the A grid and leave the B grid empty.
-template<typename GridOrTreeT> OPENVDB_STATIC_SPECIALIZATION
-inline void compMin(GridOrTreeT& a, GridOrTreeT& b);
+template<typename GridOrTreeT>
+void compMin(GridOrTreeT& a, GridOrTreeT& b);
 /// @brief Given grids A and B, compute a + b per voxel (using sparse traversal).
 /// Store the result in the A grid and leave the B grid empty.
-template<typename GridOrTreeT> OPENVDB_STATIC_SPECIALIZATION
-inline void compSum(GridOrTreeT& a, GridOrTreeT& b);
+template<typename GridOrTreeT>
+void compSum(GridOrTreeT& a, GridOrTreeT& b);
 /// @brief Given grids A and B, compute a * b per voxel (using sparse traversal).
 /// Store the result in the A grid and leave the B grid empty.
-template<typename GridOrTreeT> OPENVDB_STATIC_SPECIALIZATION
-inline void compMul(GridOrTreeT& a, GridOrTreeT& b);
+template<typename GridOrTreeT>
+void compMul(GridOrTreeT& a, GridOrTreeT& b);
 /// @brief Given grids A and B, compute a / b per voxel (using sparse traversal).
 /// Store the result in the A grid and leave the B grid empty.
-template<typename GridOrTreeT> OPENVDB_STATIC_SPECIALIZATION
-inline void compDiv(GridOrTreeT& a, GridOrTreeT& b);
+template<typename GridOrTreeT>
+void compDiv(GridOrTreeT& a, GridOrTreeT& b);
 
 /// Copy the active voxels of B into A.
-template<typename GridOrTreeT> OPENVDB_STATIC_SPECIALIZATION
-inline void compReplace(GridOrTreeT& a, const GridOrTreeT& b);
+template<typename GridOrTreeT>
+void compReplace(GridOrTreeT& a, const GridOrTreeT& b);
 
 
 ////////////////////////////////////////
@@ -144,6 +145,8 @@ divide(const T& a, const T& b)
 inline bool divide(bool a, bool /*b*/) { return a; }
 
 
+/// @cond OPENVDB_DOCS_INTERNAL
+
 enum CSGOperation { CSG_UNION, CSG_INTERSECTION, CSG_DIFFERENCE };
 
 template<typename TreeType, CSGOperation Operation>
@@ -155,7 +158,7 @@ struct BuildPrimarySegment
     using NodeMaskType = typename LeafNodeType::NodeMaskType;
     using RootNodeType = typename TreeType::RootNodeType;
     using NodeChainType = typename RootNodeType::NodeChainType;
-    using InternalNodeType = typename boost::mpl::at<NodeChainType, boost::mpl::int_<1> >::type;
+    using InternalNodeType = typename NodeChainType::template Get<1>;
 
     BuildPrimarySegment(const TreeType& lhs, const TreeType& rhs)
         : mSegment(new TreeType(lhs.background()))
@@ -363,7 +366,7 @@ struct BuildSecondarySegment
     using NodeMaskType = typename LeafNodeType::NodeMaskType;
     using RootNodeType = typename TreeType::RootNodeType;
     using NodeChainType = typename RootNodeType::NodeChainType;
-    using InternalNodeType = typename boost::mpl::at<NodeChainType, boost::mpl::int_<1> >::type;
+    using InternalNodeType = typename NodeChainType::template Get<1>;
 
     BuildSecondarySegment(const TreeType& lhs, const TreeType& rhs)
         : mSegment(new TreeType(lhs.background()))
@@ -546,7 +549,7 @@ private:
 
 
 template<CSGOperation Operation, typename TreeType>
-inline typename TreeType::Ptr
+typename TreeType::Ptr
 doCSGCopy(const TreeType& lhs, const TreeType& rhs)
 {
     BuildPrimarySegment<TreeType, Operation> primary(lhs, rhs);
@@ -596,19 +599,16 @@ struct GridOrTreeConstructor<Grid<TreeType> >
 
 ////////////////////////////////////////
 
-/// @cond COMPOSITE_INTERNAL
 /// List of pairs of leaf node pointers
 template <typename LeafT>
 using LeafPairList = std::vector<std::pair<LeafT*, LeafT*>>;
-/// @endcond
 
-/// @cond COMPOSITE_INTERNAL
 /// Transfers leaf nodes from a source tree into a
-/// desitnation tree, unless it already exists in the destination tree
+/// destination tree, unless it already exists in the destination tree
 /// in which case pointers to both leaf nodes are added to a list for
 /// subsequent compositing operations.
 template <typename TreeT>
-inline void transferLeafNodes(TreeT &srcTree, TreeT &dstTree,
+void transferLeafNodes(TreeT &srcTree, TreeT &dstTree,
                               LeafPairList<typename TreeT::LeafNodeType> &overlapping)
 {
     using LeafT = typename TreeT::LeafNodeType;
@@ -626,10 +626,8 @@ inline void transferLeafNodes(TreeT &srcTree, TreeT &dstTree,
         }
     }
 }
-/// @endcond
 
-/// @cond COMPOSITE_INTERNAL
-/// Template specailization of compActiveLeafVoxels
+/// Template specialization of compActiveLeafVoxels
 template <typename TreeT, typename OpT>
 inline
 typename std::enable_if<
@@ -654,10 +652,8 @@ doCompActiveLeafVoxels(TreeT &srcTree, TreeT &dstTree, OpT op)
         }
    });
 }
-/// @endcond
 
-/// @cond COMPOSITE_INTERNAL
-/// Template specailization of compActiveLeafVoxels
+/// Template specialization of compActiveLeafVoxels
 template <typename TreeT, typename OpT>
 inline
 typename std::enable_if<
@@ -678,8 +674,7 @@ doCompActiveLeafVoxels(TreeT &srcTree, TreeT &dstTree, OpT)
     });
 }
 
-/// @cond COMPOSITE_INTERNAL
-/// Template specailization of compActiveLeafVoxels
+/// Template specialization of compActiveLeafVoxels
 template <typename TreeT, typename OpT>
 inline
 typename std::enable_if<
@@ -709,9 +704,7 @@ doCompActiveLeafVoxels(TreeT &srcTree, TreeT &dstTree, OpT op)
         }
     });
 }
-/// @endcond
 
-/// @cond COMPOSITE_INTERNAL
 /// Default functor for compActiveLeafVoxels
 template <typename TreeT>
 struct CopyOp
@@ -720,13 +713,35 @@ struct CopyOp
     CopyOp() = default;
     void operator()(ValueT& dst, const ValueT& src) const { dst = src; }
 };
+
+template <typename TreeT>
+void validateLevelSet(const TreeT& tree, const std::string& gridName = std::string(""))
+{
+    using ValueT = typename TreeT::ValueType;
+    const ValueT zero = zeroVal<ValueT>();
+    if (!(tree.background() > zero)) {
+        std::stringstream ss;
+        ss << "expected grid ";
+        if (!gridName.empty()) ss << gridName << " ";
+        ss << "outside value > 0, got " << tree.background();
+        OPENVDB_THROW(ValueError, ss.str());
+    }
+    if (!(-tree.background() < zero)) {
+        std::stringstream ss;
+        ss << "expected grid ";
+        if (!gridName.empty()) ss << gridName << " ";
+        ss << "inside value < 0, got " << -tree.background();
+        OPENVDB_THROW(ValueError, ss.str());
+    }
+}
+
 /// @endcond
 
 } // namespace composite
 
 
 template<typename GridOrTreeT>
-OPENVDB_STATIC_SPECIALIZATION inline void
+void
 compMax(GridOrTreeT& aTree, GridOrTreeT& bTree)
 {
     using Adapter = TreeAdapter<GridOrTreeT>;
@@ -742,7 +757,7 @@ compMax(GridOrTreeT& aTree, GridOrTreeT& bTree)
 
 
 template<typename GridOrTreeT>
-OPENVDB_STATIC_SPECIALIZATION inline void
+void
 compMin(GridOrTreeT& aTree, GridOrTreeT& bTree)
 {
     using Adapter = TreeAdapter<GridOrTreeT>;
@@ -758,7 +773,7 @@ compMin(GridOrTreeT& aTree, GridOrTreeT& bTree)
 
 
 template<typename GridOrTreeT>
-OPENVDB_STATIC_SPECIALIZATION inline void
+void
 compSum(GridOrTreeT& aTree, GridOrTreeT& bTree)
 {
     using Adapter = TreeAdapter<GridOrTreeT>;
@@ -773,7 +788,7 @@ compSum(GridOrTreeT& aTree, GridOrTreeT& bTree)
 
 
 template<typename GridOrTreeT>
-OPENVDB_STATIC_SPECIALIZATION inline void
+void
 compMul(GridOrTreeT& aTree, GridOrTreeT& bTree)
 {
     using Adapter = TreeAdapter<GridOrTreeT>;
@@ -788,7 +803,7 @@ compMul(GridOrTreeT& aTree, GridOrTreeT& bTree)
 
 
 template<typename GridOrTreeT>
-OPENVDB_STATIC_SPECIALIZATION inline void
+void
 compDiv(GridOrTreeT& aTree, GridOrTreeT& bTree)
 {
     using Adapter = TreeAdapter<GridOrTreeT>;
@@ -833,7 +848,7 @@ struct CompReplaceOp
 
 
 template<typename GridOrTreeT>
-OPENVDB_STATIC_SPECIALIZATION inline void
+void
 compReplace(GridOrTreeT& aTree, const GridOrTreeT& bTree)
 {
     using Adapter = TreeAdapter<GridOrTreeT>;
@@ -858,309 +873,54 @@ compReplace(GridOrTreeT& aTree, const GridOrTreeT& bTree)
 ////////////////////////////////////////
 
 
-/// Base visitor class for CSG operations
-/// (not intended to be used polymorphically, so no virtual functions)
-template<typename TreeType>
-class CsgVisitorBase
-{
-public:
-    using TreeT = TreeType;
-    using ValueT = typename TreeT::ValueType;
-    using ChildIterT = typename TreeT::LeafNodeType::ChildAllIter;
-
-    enum { STOP = 3 };
-
-    CsgVisitorBase(const TreeT& aTree, const TreeT& bTree):
-        mAOutside(aTree.background()),
-        mAInside(math::negative(mAOutside)),
-        mBOutside(bTree.background()),
-        mBInside(math::negative(mBOutside))
-    {
-        const ValueT zero = zeroVal<ValueT>();
-        if (!(mAOutside > zero)) {
-            OPENVDB_THROW(ValueError,
-                "expected grid A outside value > 0, got " << mAOutside);
-        }
-        if (!(mAInside < zero)) {
-            OPENVDB_THROW(ValueError,
-                "expected grid A inside value < 0, got " << mAInside);
-        }
-        if (!(mBOutside > zero)) {
-            OPENVDB_THROW(ValueError,
-                "expected grid B outside value > 0, got " << mBOutside);
-        }
-        if (!(mBInside < zero)) {
-            OPENVDB_THROW(ValueError,
-                "expected grid B outside value < 0, got " << mBOutside);
-        }
-    }
-
-protected:
-    ValueT mAOutside, mAInside, mBOutside, mBInside;
-};
-
-
-////////////////////////////////////////
-
-
-template<typename TreeType>
-struct CsgUnionVisitor: public CsgVisitorBase<TreeType>
-{
-    using TreeT = TreeType;
-    using ValueT = typename TreeT::ValueType;
-    using ChildIterT = typename TreeT::LeafNodeType::ChildAllIter;
-
-    enum { STOP = CsgVisitorBase<TreeT>::STOP };
-
-    CsgUnionVisitor(const TreeT& a, const TreeT& b): CsgVisitorBase<TreeT>(a, b) {}
-
-    /// Don't process nodes that are at different tree levels.
-    template<typename AIterT, typename BIterT>
-    inline int operator()(AIterT&, BIterT&) { return 0; }
-
-    /// Process root and internal nodes.
-    template<typename IterT>
-    inline int operator()(IterT& aIter, IterT& bIter)
-    {
-        ValueT aValue = zeroVal<ValueT>();
-        typename IterT::ChildNodeType* aChild = aIter.probeChild(aValue);
-        if (!aChild && aValue < zeroVal<ValueT>()) {
-            // A is an inside tile.  Leave it alone and stop traversing this branch.
-            return STOP;
-        }
-
-        ValueT bValue = zeroVal<ValueT>();
-        typename IterT::ChildNodeType* bChild = bIter.probeChild(bValue);
-        if (!bChild && bValue < zeroVal<ValueT>()) {
-            // B is an inside tile.  Make A an inside tile and stop traversing this branch.
-            aIter.setValue(this->mAInside);
-            aIter.setValueOn(bIter.isValueOn());
-            delete aChild;
-            return STOP;
-        }
-
-        if (!aChild && aValue > zeroVal<ValueT>()) {
-            // A is an outside tile.  If B has a child, transfer it to A,
-            // otherwise leave A alone.
-            if (bChild) {
-                bIter.setValue(this->mBOutside);
-                bIter.setValueOff();
-                bChild->resetBackground(this->mBOutside, this->mAOutside);
-                aIter.setChild(bChild); // transfer child
-                delete aChild;
-            }
-            return STOP;
-        }
-
-        // If A has a child and B is an outside tile, stop traversing this branch.
-        // Continue traversal only if A and B both have children.
-        return (aChild && bChild) ? 0 : STOP;
-    }
-
-    /// Process leaf node values.
-    inline int operator()(ChildIterT& aIter, ChildIterT& bIter)
-    {
-        ValueT aValue, bValue;
-        aIter.probeValue(aValue);
-        bIter.probeValue(bValue);
-        if (aValue > bValue) { // a = min(a, b)
-            aIter.setValue(bValue);
-            aIter.setValueOn(bIter.isValueOn());
-        }
-        return 0;
-    }
-};
-
-
-
-////////////////////////////////////////
-
-
-template<typename TreeType>
-struct CsgIntersectVisitor: public CsgVisitorBase<TreeType>
-{
-    using TreeT = TreeType;
-    using ValueT = typename TreeT::ValueType;
-    using ChildIterT = typename TreeT::LeafNodeType::ChildAllIter;
-
-    enum { STOP = CsgVisitorBase<TreeT>::STOP };
-
-    CsgIntersectVisitor(const TreeT& a, const TreeT& b): CsgVisitorBase<TreeT>(a, b) {}
-
-    /// Don't process nodes that are at different tree levels.
-    template<typename AIterT, typename BIterT>
-    inline int operator()(AIterT&, BIterT&) { return 0; }
-
-    /// Process root and internal nodes.
-    template<typename IterT>
-    inline int operator()(IterT& aIter, IterT& bIter)
-    {
-        ValueT aValue = zeroVal<ValueT>();
-        typename IterT::ChildNodeType* aChild = aIter.probeChild(aValue);
-        if (!aChild && !(aValue < zeroVal<ValueT>())) {
-            // A is an outside tile.  Leave it alone and stop traversing this branch.
-            return STOP;
-        }
-
-        ValueT bValue = zeroVal<ValueT>();
-        typename IterT::ChildNodeType* bChild = bIter.probeChild(bValue);
-        if (!bChild && !(bValue < zeroVal<ValueT>())) {
-            // B is an outside tile.  Make A an outside tile and stop traversing this branch.
-            aIter.setValue(this->mAOutside);
-            aIter.setValueOn(bIter.isValueOn());
-            delete aChild;
-            return STOP;
-        }
-
-        if (!aChild && aValue < zeroVal<ValueT>()) {
-            // A is an inside tile.  If B has a child, transfer it to A,
-            // otherwise leave A alone.
-            if (bChild) {
-                bIter.setValue(this->mBOutside);
-                bIter.setValueOff();
-                bChild->resetBackground(this->mBOutside, this->mAOutside);
-                aIter.setChild(bChild); // transfer child
-                delete aChild;
-            }
-            return STOP;
-        }
-
-        // If A has a child and B is an outside tile, stop traversing this branch.
-        // Continue traversal only if A and B both have children.
-        return (aChild && bChild) ? 0 : STOP;
-    }
-
-    /// Process leaf node values.
-    inline int operator()(ChildIterT& aIter, ChildIterT& bIter)
-    {
-        ValueT aValue, bValue;
-        aIter.probeValue(aValue);
-        bIter.probeValue(bValue);
-        if (aValue < bValue) { // a = max(a, b)
-            aIter.setValue(bValue);
-            aIter.setValueOn(bIter.isValueOn());
-        }
-        return 0;
-    }
-};
-
-
-////////////////////////////////////////
-
-
-template<typename TreeType>
-struct CsgDiffVisitor: public CsgVisitorBase<TreeType>
-{
-    using TreeT = TreeType;
-    using ValueT = typename TreeT::ValueType;
-    using ChildIterT = typename TreeT::LeafNodeType::ChildAllIter;
-
-    enum { STOP = CsgVisitorBase<TreeT>::STOP };
-
-    CsgDiffVisitor(const TreeT& a, const TreeT& b): CsgVisitorBase<TreeT>(a, b) {}
-
-    /// Don't process nodes that are at different tree levels.
-    template<typename AIterT, typename BIterT>
-    inline int operator()(AIterT&, BIterT&) { return 0; }
-
-    /// Process root and internal nodes.
-    template<typename IterT>
-    inline int operator()(IterT& aIter, IterT& bIter)
-    {
-        ValueT aValue = zeroVal<ValueT>();
-        typename IterT::ChildNodeType* aChild = aIter.probeChild(aValue);
-        if (!aChild && !(aValue < zeroVal<ValueT>())) {
-            // A is an outside tile.  Leave it alone and stop traversing this branch.
-            return STOP;
-        }
-
-        ValueT bValue = zeroVal<ValueT>();
-        typename IterT::ChildNodeType* bChild = bIter.probeChild(bValue);
-        if (!bChild && bValue < zeroVal<ValueT>()) {
-            // B is an inside tile.  Make A an inside tile and stop traversing this branch.
-            aIter.setValue(this->mAOutside);
-            aIter.setValueOn(bIter.isValueOn());
-            delete aChild;
-            return STOP;
-        }
-
-        if (!aChild && aValue < zeroVal<ValueT>()) {
-            // A is an inside tile.  If B has a child, transfer it to A,
-            // otherwise leave A alone.
-            if (bChild) {
-                bIter.setValue(this->mBOutside);
-                bIter.setValueOff();
-                bChild->resetBackground(this->mBOutside, this->mAOutside);
-                aIter.setChild(bChild); // transfer child
-                bChild->negate();
-                delete aChild;
-            }
-            return STOP;
-        }
-
-        // If A has a child and B is an outside tile, stop traversing this branch.
-        // Continue traversal only if A and B both have children.
-        return (aChild && bChild) ? 0 : STOP;
-    }
-
-    /// Process leaf node values.
-    inline int operator()(ChildIterT& aIter, ChildIterT& bIter)
-    {
-        ValueT aValue, bValue;
-        aIter.probeValue(aValue);
-        bIter.probeValue(bValue);
-        bValue = math::negative(bValue);
-        if (aValue < bValue) { // a = max(a, -b)
-            aIter.setValue(bValue);
-            aIter.setValueOn(bIter.isValueOn());
-        }
-        return 0;
-    }
-};
-
-
-////////////////////////////////////////
-
-
 template<typename GridOrTreeT>
-OPENVDB_STATIC_SPECIALIZATION inline void
+void
 csgUnion(GridOrTreeT& a, GridOrTreeT& b, bool prune)
 {
     using Adapter = TreeAdapter<GridOrTreeT>;
     using TreeT = typename Adapter::TreeType;
     TreeT &aTree = Adapter::tree(a), &bTree = Adapter::tree(b);
-    CsgUnionVisitor<TreeT> visitor(aTree, bTree);
-    aTree.visit2(bTree, visitor);
+    composite::validateLevelSet(aTree, "A");
+    composite::validateLevelSet(bTree, "B");
+    CsgUnionOp<TreeT> op(bTree, Steal());
+    tree::DynamicNodeManager<TreeT> nodeManager(aTree);
+    nodeManager.foreachTopDown(op);
     if (prune) tools::pruneLevelSet(aTree);
 }
 
 template<typename GridOrTreeT>
-OPENVDB_STATIC_SPECIALIZATION inline void
+void
 csgIntersection(GridOrTreeT& a, GridOrTreeT& b, bool prune)
 {
     using Adapter = TreeAdapter<GridOrTreeT>;
     using TreeT = typename Adapter::TreeType;
     TreeT &aTree = Adapter::tree(a), &bTree = Adapter::tree(b);
-    CsgIntersectVisitor<TreeT> visitor(aTree, bTree);
-    aTree.visit2(bTree, visitor);
+    composite::validateLevelSet(aTree, "A");
+    composite::validateLevelSet(bTree, "B");
+    CsgIntersectionOp<TreeT> op(bTree, Steal());
+    tree::DynamicNodeManager<TreeT> nodeManager(aTree);
+    nodeManager.foreachTopDown(op);
     if (prune) tools::pruneLevelSet(aTree);
 }
 
 template<typename GridOrTreeT>
-OPENVDB_STATIC_SPECIALIZATION inline void
+void
 csgDifference(GridOrTreeT& a, GridOrTreeT& b, bool prune)
 {
     using Adapter = TreeAdapter<GridOrTreeT>;
     using TreeT = typename Adapter::TreeType;
     TreeT &aTree = Adapter::tree(a), &bTree = Adapter::tree(b);
-    CsgDiffVisitor<TreeT> visitor(aTree, bTree);
-    aTree.visit2(bTree, visitor);
+    composite::validateLevelSet(aTree, "A");
+    composite::validateLevelSet(bTree, "B");
+    CsgDifferenceOp<TreeT> op(bTree, Steal());
+    tree::DynamicNodeManager<TreeT> nodeManager(aTree);
+    nodeManager.foreachTopDown(op);
     if (prune) tools::pruneLevelSet(aTree);
 }
 
 
 template<typename GridOrTreeT>
-OPENVDB_STATIC_SPECIALIZATION inline typename GridOrTreeT::Ptr
+typename GridOrTreeT::Ptr
 csgUnionCopy(const GridOrTreeT& a, const GridOrTreeT& b)
 {
     using Adapter = TreeAdapter<GridOrTreeT>;
@@ -1174,7 +934,7 @@ csgUnionCopy(const GridOrTreeT& a, const GridOrTreeT& b)
 
 
 template<typename GridOrTreeT>
-OPENVDB_STATIC_SPECIALIZATION inline typename GridOrTreeT::Ptr
+typename GridOrTreeT::Ptr
 csgIntersectionCopy(const GridOrTreeT& a, const GridOrTreeT& b)
 {
     using Adapter = TreeAdapter<GridOrTreeT>;
@@ -1188,7 +948,7 @@ csgIntersectionCopy(const GridOrTreeT& a, const GridOrTreeT& b)
 
 
 template<typename GridOrTreeT>
-OPENVDB_STATIC_SPECIALIZATION inline typename GridOrTreeT::Ptr
+typename GridOrTreeT::Ptr
 csgDifferenceCopy(const GridOrTreeT& a, const GridOrTreeT& b)
 {
     using Adapter = TreeAdapter<GridOrTreeT>;
@@ -1224,11 +984,135 @@ csgDifferenceCopy(const GridOrTreeT& a, const GridOrTreeT& b)
 /// @warning This function only operated on leaf node values,
 ///          i.e. tile values are ignored.
 template<typename TreeT, typename OpT = composite::CopyOp<TreeT> >
-inline void
+void
 compActiveLeafVoxels(TreeT &srcTree, TreeT &dstTree, OpT op = composite::CopyOp<TreeT>())
 {
     composite::doCompActiveLeafVoxels<TreeT, OpT>(srcTree, dstTree, op);
 }
+
+
+////////////////////////////////////////
+
+
+// Explicit Template Instantiation
+
+#ifdef OPENVDB_USE_EXPLICIT_INSTANTIATION
+
+#ifdef OPENVDB_INSTANTIATE_COMPOSITE
+#include <openvdb/util/ExplicitInstantiation.h>
+#endif
+
+#define _FUNCTION(TreeT) \
+    void csgUnion(TreeT&, TreeT&, bool)
+OPENVDB_REAL_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#define _FUNCTION(TreeT) \
+    void csgUnion(Grid<TreeT>&, Grid<TreeT>&, bool)
+OPENVDB_REAL_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#define _FUNCTION(TreeT) \
+    void csgIntersection(TreeT&, TreeT&, bool)
+OPENVDB_REAL_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#define _FUNCTION(TreeT) \
+    void csgIntersection(Grid<TreeT>&, Grid<TreeT>&, bool)
+OPENVDB_REAL_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#define _FUNCTION(TreeT) \
+    void csgDifference(TreeT&, TreeT&, bool)
+OPENVDB_REAL_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#define _FUNCTION(TreeT) \
+    void csgDifference(Grid<TreeT>&, Grid<TreeT>&, bool)
+OPENVDB_REAL_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#define _FUNCTION(TreeT) \
+    TreeT::Ptr csgUnionCopy(const TreeT&, const TreeT&)
+OPENVDB_REAL_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#define _FUNCTION(TreeT) \
+    Grid<TreeT>::Ptr csgUnionCopy(const Grid<TreeT>&, const Grid<TreeT>&)
+OPENVDB_REAL_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#define _FUNCTION(TreeT) \
+    TreeT::Ptr csgIntersectionCopy(const TreeT&, const TreeT&)
+OPENVDB_REAL_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#define _FUNCTION(TreeT) \
+    Grid<TreeT>::Ptr csgIntersectionCopy(const Grid<TreeT>&, const Grid<TreeT>&)
+OPENVDB_REAL_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#define _FUNCTION(TreeT) \
+    TreeT::Ptr csgDifferenceCopy(const TreeT&, const TreeT&)
+OPENVDB_REAL_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#define _FUNCTION(TreeT) \
+    Grid<TreeT>::Ptr csgDifferenceCopy(const Grid<TreeT>&, const Grid<TreeT>&)
+OPENVDB_REAL_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#define _FUNCTION(TreeT) \
+    void compMax(TreeT&, TreeT&)
+OPENVDB_VOLUME_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#define _FUNCTION(TreeT) \
+    void compMax(Grid<TreeT>&, Grid<TreeT>&)
+OPENVDB_VOLUME_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#define _FUNCTION(TreeT) \
+    void compMin(TreeT&, TreeT&)
+OPENVDB_VOLUME_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#define _FUNCTION(TreeT) \
+    void compMin(Grid<TreeT>&, Grid<TreeT>&)
+OPENVDB_VOLUME_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#define _FUNCTION(TreeT) \
+    void compSum(TreeT&, TreeT&)
+OPENVDB_VOLUME_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#define _FUNCTION(TreeT) \
+    void compSum(Grid<TreeT>&, Grid<TreeT>&)
+OPENVDB_VOLUME_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#define _FUNCTION(TreeT) \
+    void compDiv(TreeT&, TreeT&)
+OPENVDB_VOLUME_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#define _FUNCTION(TreeT) \
+    void compDiv(Grid<TreeT>&, Grid<TreeT>&)
+OPENVDB_VOLUME_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#define _FUNCTION(TreeT) \
+    void compReplace(TreeT&, const TreeT&)
+OPENVDB_VOLUME_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#define _FUNCTION(TreeT) \
+    void compReplace(Grid<TreeT>&, const Grid<TreeT>&)
+OPENVDB_VOLUME_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#endif // OPENVDB_USE_EXPLICIT_INSTANTIATION
 
 
 } // namespace tools

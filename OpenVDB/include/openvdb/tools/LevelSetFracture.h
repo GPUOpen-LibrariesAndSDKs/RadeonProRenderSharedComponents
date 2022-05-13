@@ -95,6 +95,7 @@ private:
 
 ////////////////////////////////////////
 
+/// @cond OPENVDB_DOCS_INTERNAL
 
 // Internal utility objects and implementation details
 
@@ -143,6 +144,7 @@ struct FindMinMaxVoxelValue {
 
 } // namespace level_set_fracture_internal
 
+/// @endcond
 
 ////////////////////////////////////////
 
@@ -309,6 +311,24 @@ LevelSetFracture<GridType, InterruptType>::process(
         mFragments.splice(mFragments.end(), newFragments);
     }
 }
+
+
+////////////////////////////////////////
+
+
+// Explicit Template Instantiation
+
+#ifdef OPENVDB_USE_EXPLICIT_INSTANTIATION
+
+#ifdef OPENVDB_INSTANTIATE_LEVELSETFRACTURE
+#include <openvdb/util/ExplicitInstantiation.h>
+#endif
+
+OPENVDB_INSTANTIATE_CLASS LevelSetFracture<FloatGrid, util::NullInterrupter>;
+OPENVDB_INSTANTIATE_CLASS LevelSetFracture<DoubleGrid, util::NullInterrupter>;
+
+#endif // OPENVDB_USE_EXPLICIT_INSTANTIATION
+
 
 } // namespace tools
 } // namespace OPENVDB_VERSION_NAME

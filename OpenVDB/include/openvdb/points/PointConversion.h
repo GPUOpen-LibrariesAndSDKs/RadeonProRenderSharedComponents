@@ -59,7 +59,7 @@ inline typename PointDataGridT::Ptr
 createPointDataGrid(const PointIndexGridT& pointIndexGrid,
                     const PositionArrayT& positions,
                     const math::Transform& xform,
-                    Metadata::Ptr positionDefaultValue = Metadata::Ptr());
+                    const Metadata* positionDefaultValue = nullptr);
 
 
 /// @brief  Convenience method to create a @c PointDataGrid from a std::vector of
@@ -76,7 +76,7 @@ template <typename CompressionT, typename PointDataGridT, typename ValueT>
 inline typename PointDataGridT::Ptr
 createPointDataGrid(const std::vector<ValueT>& positions,
                     const math::Transform& xform,
-                    Metadata::Ptr positionDefaultValue = Metadata::Ptr());
+                    const Metadata* positionDefaultValue = nullptr);
 
 
 /// @brief  Stores point attribute data in an existing @c PointDataGrid attribute.
@@ -162,6 +162,16 @@ convertPointDataGridGroup(  Group& group,
                             const FilterT& filter = NullFilter(),
                             const bool inCoreOnly = false);
 
+// for internal use only - this traits class extracts T::value_type if defined,
+// otherwise falls back to using Vec3R
+namespace internal {
+template <typename...> using void_t = void;
+template <typename T, typename = void>
+struct ValueTypeTraits { using Type = Vec3R; /* default type if T::value_type is not defined*/ };
+template <typename T>
+struct ValueTypeTraits <T, void_t<typename T::value_type>> { using Type = typename T::value_type; };
+} // namespace internal
+
 /// @ brief Given a container of world space positions and a target points per voxel,
 /// compute a uniform voxel size that would best represent the storage of the points in a grid.
 /// This voxel size is typically used for conversion of the points into a PointDataGrid.
@@ -172,9 +182,13 @@ convertPointDataGridGroup(  Group& group,
 /// @param decimalPlaces    for readability, truncate voxel size to this number of decimals
 /// @param interrupter      an optional interrupter
 ///
+/// @note VecT will be PositionWrapper::value_type or Vec3R (if there is no value_type defined)
+///
 /// @note if none or one point provided in positions, the default voxel size of 0.1 will be returned
 ///
-template<typename PositionWrapper, typename InterrupterT = openvdb::util::NullInterrupter>
+template<   typename PositionWrapper,
+            typename InterrupterT = openvdb::util::NullInterrupter,
+            typename VecT = typename internal::ValueTypeTraits<PositionWrapper>::Type>
 inline float
 computeVoxelSize(  const PositionWrapper& positions,
                    const uint32_t pointsPerVoxel,
@@ -211,6 +225,7 @@ private:
 
 ////////////////////////////////////////
 
+/// @cond OPENVDB_DOCS_INTERNAL
 
 namespace point_conversion_internal {
 
@@ -564,7 +579,7 @@ struct ConvertPointDataGridGroupOp {
     const bool                              mInCoreOnly;
 }; // ConvertPointDataGridGroupOp
 
-template<typename PositionArrayT>
+template<typename PositionArrayT, typename VecT = Vec3R>
 struct CalculatePositionBounds
 {
     CalculatePositionBounds(const PositionArrayT& positions,
@@ -581,7 +596,7 @@ struct CalculatePositionBounds
         , mMax(-std::numeric_limits<Real>::max()) {}
 
     void operator()(const tbb::blocked_range<size_t>& range) {
-        Vec3R pos;
+        VecT pos;
         for (size_t n = range.begin(), N = range.end(); n != N; ++n) {
             mPositions.getPos(n, pos);
             pos = mInverseMat.transform(pos);
@@ -602,22 +617,25 @@ struct CalculatePositionBounds
 private:
     const PositionArrayT& mPositions;
     const math::Mat4d&    mInverseMat;
-    Vec3R mMin, mMax;
+    VecT mMin, mMax;
 };
 
 } // namespace point_conversion_internal
 
+/// @endcond
 
 ////////////////////////////////////////
 
 
 template<typename CompressionT, typename PointDataGridT, typename PositionArrayT, typename PointIndexGridT>
 inline typename PointDataGridT::Ptr
-createPointDataGrid(const PointIndexGridT& pointIndexGrid, const PositionArrayT& positions,
-                    const math::Transform& xform, Metadata::Ptr positionDefaultValue)
+createPointDataGrid(const PointIndexGridT& pointIndexGrid,
+                    const PositionArrayT& positions,
+                    const math::Transform& xform,
+                    const Metadata* positionDefaultValue)
 {
     using PointDataTreeT        = typename PointDataGridT::TreeType;
-    using LeafT                 = typename PointDataTree::LeafNodeType;
+    using LeafT                 = typename PointDataTreeT::LeafNodeType;
     using PointIndexLeafT       = typename PointIndexGridT::TreeType::LeafNodeType;
     using PointIndexT           = typename PointIndexLeafT::ValueType;
     using LeafManagerT          = typename tree::LeafManager<PointDataTreeT>;
@@ -718,12 +736,14 @@ template <typename CompressionT, typename PointDataGridT, typename ValueT>
 inline typename PointDataGridT::Ptr
 createPointDataGrid(const std::vector<ValueT>& positions,
                     const math::Transform& xform,
-                    Metadata::Ptr positionDefaultValue)
+                    const Metadata* positionDefaultValue)
 {
     const PointAttributeVector<ValueT> pointList(positions);
 
-    tools::PointIndexGrid::Ptr pointIndexGrid = tools::createPointIndexGrid<tools::PointIndexGrid>(pointList, xform);
-    return createPointDataGrid<CompressionT, PointDataGridT>(*pointIndexGrid, pointList, xform, positionDefaultValue);
+    tools::PointIndexGrid::Ptr pointIndexGrid =
+        tools::createPointIndexGrid<tools::PointIndexGrid>(pointList, xform);
+    return createPointDataGrid<CompressionT, PointDataGridT>(
+        *pointIndexGrid, pointList, xform, positionDefaultValue);
 }
 
 
@@ -851,7 +871,7 @@ convertPointDataGridGroup(  Group& group,
     if (!iter)  return;
 
     LeafManagerT leafManager(tree);
-    ConvertPointDataGridGroupOp<PointDataTree, Group, FilterT> convert(
+    ConvertPointDataGridGroupOp<PointDataTreeT, Group, FilterT> convert(
                     group, pointOffsets, startOffset, index,
                     filter, inCoreOnly);
     tbb::parallel_for(leafManager.leafRange(), convert);
@@ -861,7 +881,7 @@ convertPointDataGridGroup(  Group& group,
     group.finalize();
 }
 
-template<typename PositionWrapper, typename InterrupterT>
+template<typename PositionWrapper, typename InterrupterT, typename VecT>
 inline float
 computeVoxelSize(  const PositionWrapper& positions,
                    const uint32_t pointsPerVoxel,
@@ -932,7 +952,7 @@ computeVoxelSize(  const PositionWrapper& positions,
     inverseTransform = math::unit(inverseTransform);
 
     tbb::blocked_range<size_t> range(0, numPoints);
-    CalculatePositionBounds<PositionWrapper> calculateBounds(positions, inverseTransform);
+    CalculatePositionBounds<PositionWrapper, VecT> calculateBounds(positions, inverseTransform);
     tbb::parallel_reduce(range, calculateBounds);
 
     BBoxd bbox = calculateBounds.getBoundingBox();
@@ -994,7 +1014,7 @@ computeVoxelSize(  const PositionWrapper& positions,
         MaskGrid::Ptr mask = createGrid<MaskGrid>(false);
         mask->setTransform(newTransform);
         tools::PointsToMask<MaskGrid, InterrupterT> pointMaskOp(*mask, interrupter);
-        pointMaskOp.addPoints(positions);
+        pointMaskOp.template addPoints<PositionWrapper, VecT>(positions);
 
         if (interrupter && util::wasInterrupted(interrupter)) break;
 
@@ -1031,69 +1051,6 @@ computeVoxelSize(  const PositionWrapper& positions,
 
 
 ////////////////////////////////////////
-
-
-// deprecated functions
-
-
-template <typename PositionAttribute, typename PointDataGridT>
-OPENVDB_DEPRECATED
-inline void
-convertPointDataGridPosition(   PositionAttribute& positionAttribute,
-                                const PointDataGridT& grid,
-                                const std::vector<Index64>& pointOffsets,
-                                const Index64 startOffset,
-                                const std::vector<Name>& includeGroups,
-                                const std::vector<Name>& excludeGroups,
-                                const bool inCoreOnly = false)
-{
-    auto leaf = grid.tree().cbeginLeaf();
-    if (!leaf)  return;
-    MultiGroupFilter filter(includeGroups, excludeGroups, leaf->attributeSet());
-    convertPointDataGridPosition(positionAttribute, grid, pointOffsets, startOffset,
-        filter, inCoreOnly);
-}
-
-
-template <typename TypedAttribute, typename PointDataTreeT>
-OPENVDB_DEPRECATED
-inline void
-convertPointDataGridAttribute(  TypedAttribute& attribute,
-                                const PointDataTreeT& tree,
-                                const std::vector<Index64>& pointOffsets,
-                                const Index64 startOffset,
-                                const unsigned arrayIndex,
-                                const Index stride,
-                                const std::vector<Name>& includeGroups,
-                                const std::vector<Name>& excludeGroups,
-                                const bool inCoreOnly = false)
-{
-    auto leaf = tree.cbeginLeaf();
-    if (!leaf)  return;
-    MultiGroupFilter filter(includeGroups, excludeGroups, leaf->attributeSet());
-    convertPointDataGridAttribute(attribute, tree, pointOffsets, startOffset,
-        arrayIndex, stride, filter, inCoreOnly);
-}
-
-
-template <typename Group, typename PointDataTreeT>
-OPENVDB_DEPRECATED
-inline void
-convertPointDataGridGroup(  Group& group,
-                            const PointDataTreeT& tree,
-                            const std::vector<Index64>& pointOffsets,
-                            const Index64 startOffset,
-                            const AttributeSet::Descriptor::GroupIndex index,
-                            const std::vector<Name>& includeGroups,
-                            const std::vector<Name>& excludeGroups,
-                            const bool inCoreOnly = false)
-{
-    auto leaf = tree.cbeginLeaf();
-    if (!leaf)  return;
-    MultiGroupFilter filter(includeGroups, excludeGroups, leaf->attributeSet());
-    convertPointDataGridGroup(group, tree, pointOffsets, startOffset,
-        index, filter, inCoreOnly);
-}
 
 
 } // namespace points

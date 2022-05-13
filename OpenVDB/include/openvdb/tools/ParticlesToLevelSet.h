@@ -62,19 +62,23 @@
 #ifndef OPENVDB_TOOLS_PARTICLES_TO_LEVELSET_HAS_BEEN_INCLUDED
 #define OPENVDB_TOOLS_PARTICLES_TO_LEVELSET_HAS_BEEN_INCLUDED
 
-#include <tbb/parallel_reduce.h>
-#include <tbb/blocked_range.h>
-#include <openvdb/Types.h>
-#include <openvdb/Grid.h>
-#include <openvdb/math/Math.h>
-#include <openvdb/math/Transform.h>
-#include <openvdb/tree/LeafManager.h>
-#include <openvdb/util/logging.h>
-#include <openvdb/util/NullInterrupter.h>
+#include "openvdb/Types.h"
+#include "openvdb/Grid.h"
+#include "openvdb/math/Math.h"
+#include "openvdb/math/Transform.h"
+#include "openvdb/tree/LeafManager.h"
+#include "openvdb/util/logging.h"
+#include "openvdb/util/NullInterrupter.h"
+#include "openvdb/thread/Threading.h"
+
 #include "Composite.h" // for csgUnion()
 #include "PointPartitioner.h"
 #include "Prune.h"
 #include "SignedFloodFill.h"
+
+#include <tbb/parallel_reduce.h>
+#include <tbb/blocked_range.h>
+
 #include <functional>
 #include <iostream>
 #include <type_traits>
@@ -137,6 +141,7 @@ inline void particleTrailsToMask(const ParticleListT&, GridT&,Real delta=1,Inter
 
 ////////////////////////////////////////
 
+/// @cond OPENVDB_DOCS_INTERNAL
 
 namespace p2ls_internal {
 // This is a simple type that combines a distance value and a particle
@@ -146,6 +151,7 @@ namespace p2ls_internal {
 template<typename VisibleT, typename BlindT> class BlindData;
 }
 
+/// @endcond
 
 template<typename SdfGridT,
          typename AttributeT = void,
@@ -703,24 +709,6 @@ private:
         }
     }
 
-    /// @brief Rasterize sphere at position P and radius R.
-    /// @return @c false if rasterization was interrupted
-    ///
-    /// @param P coordinates of the particle position in voxel units
-    /// @param R radius of particle in voxel units
-    /// @param att
-    /// @param acc grid accessor with a private copy of the grid
-    bool makeSphere(const Vec3R& P, Real R, const AttT& att, AccessorT& acc)
-    {
-        OPENVDB_NO_UNREACHABLE_CODE_WARNING_BEGIN
-        if (OutputIsMask) {
-            return makeSphereMask(P, R, att, acc);
-        } else {
-            return makeNarrowBandSphere(P, R, att, acc);
-        }
-        OPENVDB_NO_UNREACHABLE_CODE_WARNING_END
-    }
-
     /// @brief Rasterize sphere at position P and radius R into
     /// a narrow-band level set with half-width, mHalfWidth.
     /// @return @c false if rasterization was interrupted
@@ -735,7 +723,9 @@ private:
     /// to world units (the grid stores the closest Euclidean signed distances
     /// measured in world units).  Also note we use the convention of positive distances
     /// outside the surface and negative distances inside the surface.
-    bool makeNarrowBandSphere(const Vec3R& P, Real R, const AttT& att, AccessorT& acc)
+    template <bool IsMaskT = OutputIsMask>
+    typename std::enable_if<!IsMaskT, bool>::type
+    makeSphere(const Vec3R& P, Real R, const AttT& att, AccessorT& acc)
     {
         const Real
             dx = mParent.mDx,
@@ -754,7 +744,7 @@ private:
         for (Coord c = lo; c.x() <= hi.x(); ++c.x()) {
             //only check interrupter every 32'th scan in x
             if (!(count++ & ((1<<5)-1)) && util::wasInterrupted(mParent.mInterrupter)) {
-                tbb::task::self().cancel_group_execution();
+                thread::cancelGroupExecution();
                 return false;
             }
             const Real x2 = math::Pow2(c.x() - P[0]);
@@ -787,7 +777,9 @@ private:
 
     /// @brief Rasterize a sphere of radius @a r at position @a p into a boolean mask grid.
     /// @return @c false if rasterization was interrupted
-    bool makeSphereMask(const Vec3R& p, Real r, const AttT& att, AccessorT& acc)
+    template <bool IsMaskT = OutputIsMask>
+    typename std::enable_if<IsMaskT, bool>::type
+    makeSphere(const Vec3R& p, Real r, const AttT& att, AccessorT& acc)
     {
         const Real
             rSquared = r * r, // sphere radius squared, in voxel units
@@ -818,7 +810,7 @@ private:
         // Densely fill the remaining regions.
         for (const auto& bbox: padding) {
             if (util::wasInterrupted(mParent.mInterrupter)) {
-                tbb::task::self().cancel_group_execution();
+                thread::cancelGroupExecution();
                 return false;
             }
             const Coord &bmin = bbox.min(), &bmax = bbox.max();
@@ -871,6 +863,7 @@ private:
 
 ///////////////////// YOU CAN SAFELY IGNORE THIS SECTION /////////////////////
 
+/// @cond OPENVDB_DOCS_INTERNAL
 
 namespace p2ls_internal {
 
@@ -935,6 +928,7 @@ operator+(const BlindData<VisibleT, BlindT>& x, const T& rhs)
 
 } // namespace p2ls_internal
 
+/// @endcond
 
 //////////////////////////////////////////////////////////////////////////////
 

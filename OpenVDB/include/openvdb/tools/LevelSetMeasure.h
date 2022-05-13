@@ -8,19 +8,22 @@
 #ifndef OPENVDB_TOOLS_LEVELSETMEASURE_HAS_BEEN_INCLUDED
 #define OPENVDB_TOOLS_LEVELSETMEASURE_HAS_BEEN_INCLUDED
 
-#include <openvdb/math/Math.h>
-#include <openvdb/Types.h>
-#include <openvdb/Grid.h>
-#include <openvdb/tree/LeafManager.h>
-#include <openvdb/tree/ValueAccessor.h>
-#include <openvdb/math/FiniteDifference.h>
-#include <openvdb/math/Operators.h>
-#include <openvdb/math/Stencils.h>
-#include <openvdb/util/NullInterrupter.h>
-#include <boost/math/constants/constants.hpp>//for Pi
+#include "openvdb/Types.h"
+#include "openvdb/Grid.h"
+#include "openvdb/tree/LeafManager.h"
+#include "openvdb/tree/ValueAccessor.h"
+#include "openvdb/math/Math.h"
+#include "openvdb/math/FiniteDifference.h"
+#include "openvdb/math/Operators.h"
+#include "openvdb/math/Stencils.h"
+#include "openvdb/util/NullInterrupter.h"
+#include "openvdb/thread/Threading.h"
+#include <openvdb/openvdb.h>
+
 #include <tbb/parallel_for.h>
 #include <tbb/parallel_sort.h>
 #include <tbb/parallel_invoke.h>
+
 #include <type_traits>
 
 namespace openvdb {
@@ -37,7 +40,7 @@ namespace tools {
 ///
 /// @throw TypeError if @a grid is not scalar or not floating-point or not a level set or empty.
 template<class GridType>
-inline Real
+Real
 levelSetArea(const GridType& grid, bool useWorldSpace = true);
 
 /// @brief Return the volume of a narrow-band level set surface.
@@ -49,7 +52,7 @@ levelSetArea(const GridType& grid, bool useWorldSpace = true);
 ///
 /// @throw TypeError if @a grid is not scalar or not floating-point or not a level set or empty.
 template<class GridType>
-inline Real
+Real
 levelSetVolume(const GridType& grid, bool useWorldSpace = true);
 
 /// @brief Return the Euler Characteristics of a narrow-band level set surface (possibly disconnected).
@@ -59,7 +62,7 @@ levelSetVolume(const GridType& grid, bool useWorldSpace = true);
 ///
 /// @throw TypeError if @a grid is not scalar or not floating-point or not a level set or empty.
 template<class GridType>
-inline int
+int
 levelSetEulerCharacteristic(const GridType& grid);
 
 /// @brief Return the genus of a narrow-band level set surface.
@@ -70,7 +73,7 @@ levelSetEulerCharacteristic(const GridType& grid);
 ///
 /// @throw TypeError if @a grid is not scalar or not floating-point or not a level set or empty.
 template<class GridType>
-inline int
+int
 levelSetGenus(const GridType& grid);
 
 ////////////////////////////////////////////////////////////////////////////////////////
@@ -81,7 +84,7 @@ class DiracDelta
 {
 public:
     // eps is the half-width of the dirac delta function in units of phi
-    DiracDelta(RealT eps) : mC(0.5/eps), mD(2*boost::math::constants::pi<RealT>()*mC), mE(eps) {}
+    DiracDelta(RealT eps) : mC(0.5/eps), mD(2*math::pi<RealT>()*mC), mE(eps) {}
     // values of the dirac delta function are in units of one over the units of phi
     inline RealT operator()(RealT phi) const { return math::Abs(phi) > mE ? 0 : mC*(1+cos(mD*phi)); }
 private:
@@ -319,7 +322,7 @@ template<typename GridT, typename InterruptT>
 inline int
 LevelSetMeasure<GridT, InterruptT>::eulerCharacteristic()
 {
-    const Real x = this->totGaussianCurvature(true) / (2.0*boost::math::constants::pi<Real>());
+    const Real x = this->totGaussianCurvature(true) / (2.0*math::pi<Real>());
     return int(math::Round( x ));
 }
 
@@ -330,7 +333,7 @@ inline bool
 LevelSetMeasure<GridT, InterruptT>::checkInterrupter()
 {
     if (util::wasInterrupted(mInterrupter)) {
-        tbb::task::self().cancel_group_execution();
+        thread::cancelGroupExecution();
         return false;
     }
     return true;
@@ -401,7 +404,7 @@ MeasureCurvatures::operator()(const LeafRange& range) const
 ////////////////////////////////////////
 
 //{
-/// @cond OPENVDB_LEVEL_SET_MEASURE_INTERNAL
+/// @cond OPENVDB_DOCS_INTERNAL
 
 template<class GridT>
 inline
@@ -425,7 +428,7 @@ doLevelSetArea(const GridT&, bool)
 //}
 
 template<class GridT>
-inline Real
+Real
 levelSetArea(const GridT& grid, bool useWorldUnits)
 {
     return doLevelSetArea<GridT>(grid, useWorldUnits);
@@ -434,7 +437,7 @@ levelSetArea(const GridT& grid, bool useWorldUnits)
 ////////////////////////////////////////
 
 //{
-/// @cond OPENVDB_LEVEL_SET_MEASURE_INTERNAL
+/// @cond OPENVDB_DOCS_INTERNAL
 
 template<class GridT>
 inline
@@ -458,7 +461,7 @@ doLevelSetVolume(const GridT&, bool)
 //}
 
 template<class GridT>
-inline Real
+Real
 levelSetVolume(const GridT& grid, bool useWorldUnits)
 {
     return doLevelSetVolume<GridT>(grid, useWorldUnits);
@@ -467,7 +470,7 @@ levelSetVolume(const GridT& grid, bool useWorldUnits)
 ////////////////////////////////////////
 
 //{
-/// @cond OPENVDB_LEVEL_SET_MEASURE_INTERNAL
+/// @cond OPENVDB_DOCS_INTERNAL
 
 template<class GridT>
 inline
@@ -492,7 +495,7 @@ doLevelSetEulerCharacteristic(const GridT&)
 
 
 template<class GridT>
-inline int
+int
 levelSetEulerCharacteristic(const GridT& grid)
 {
     return doLevelSetEulerCharacteristic(grid);
@@ -501,7 +504,7 @@ levelSetEulerCharacteristic(const GridT& grid)
 ////////////////////////////////////////
 
 //{
-/// @cond OPENVDB_LEVEL_SET_MEASURE_INTERNAL
+/// @cond OPENVDB_DOCS_INTERNAL
 
 template<class GridT>
 inline
@@ -535,26 +538,49 @@ doLevelSetGenus(const GridT&)
 //}
 
 template<class GridT>
-inline int
+int
 levelSetGenus(const GridT& grid)
 {
     return doLevelSetGenus(grid);
 }
 
-////////////////////////////////////////////////////////////////////////////////////////
 
-/// @deprecated Use the @a LevelSetMeasure class instead.
-template<class GridT>
-OPENVDB_DEPRECATED
-inline void
-levelSetMeasure(const GridT& grid, Real& area, Real& volume, Real& avgCurvature,
-                bool useWorldUnits = true)
-{
-    LevelSetMeasure<GridT> m(grid);
-    area = m.area(useWorldUnits);
-    volume = m.volume(useWorldUnits);
-    avgCurvature = m.avgMeanCurvature(useWorldUnits);
-}
+////////////////////////////////////////
+
+
+// Explicit Template Instantiation
+
+#ifdef OPENVDB_USE_EXPLICIT_INSTANTIATION
+
+#ifdef OPENVDB_INSTANTIATE_LEVELSETMEASURE
+#include <openvdb/util/ExplicitInstantiation.h>
+#endif
+
+#define _FUNCTION(TreeT) \
+    Real levelSetArea(const Grid<TreeT>&, bool)
+OPENVDB_REAL_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#define _FUNCTION(TreeT) \
+    Real levelSetVolume(const Grid<TreeT>&, bool)
+OPENVDB_REAL_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#define _FUNCTION(TreeT) \
+    int levelSetEulerCharacteristic(const Grid<TreeT>&)
+OPENVDB_REAL_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#define _FUNCTION(TreeT) \
+    int levelSetGenus(const Grid<TreeT>&)
+OPENVDB_REAL_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+OPENVDB_INSTANTIATE_CLASS LevelSetMeasure<FloatGrid, util::NullInterrupter>;
+OPENVDB_INSTANTIATE_CLASS LevelSetMeasure<DoubleGrid, util::NullInterrupter>;
+
+#endif // OPENVDB_USE_EXPLICIT_INSTANTIATION
+
 
 } // namespace tools
 } // namespace OPENVDB_VERSION_NAME
