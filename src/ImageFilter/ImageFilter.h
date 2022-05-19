@@ -33,7 +33,13 @@ enum class RifFilterType
 	ShadowCatcher,
 	ReflectionCatcher,
 	ShadowReflectionCatcher,
-	Upscaler
+	Upscaler,
+
+	LinearTonemap,
+	PhotoLinearTonemap,
+	AutoLinearTonemap,
+	MaxWhiteTonemap,
+	ReinhardTonemap,
 };
 
 enum RifFilterInput
@@ -468,4 +474,58 @@ public:
 
 	virtual void AttachFilter(const RifContextWrapper* rifContext) override;
 };
+
+
+class RifFilterLinearTonemap final : public RifFilterWrapper
+{
+public:
+	explicit RifFilterLinearTonemap(const RifContextWrapper* rifContext, std::uint32_t width, std::uint32_t height,
+		const std::string& modelsPath);
+	virtual ~RifFilterLinearTonemap();
+
+	virtual void AttachFilter(const RifContextWrapper* rifContext) override;
+};
+
+
+class RifFilterPhotoLinearTonemap final : public RifFilterWrapper
+{
+public:
+	explicit RifFilterPhotoLinearTonemap(const RifContextWrapper* rifContext, std::uint32_t width, std::uint32_t height,
+		const std::string& modelsPath);
+	virtual ~RifFilterPhotoLinearTonemap();
+
+	virtual void AttachFilter(const RifContextWrapper* rifContext) override;
+};
+
+
+class RiffilterAutoLinearTonemap final : public RifFilterWrapper
+{
+public:
+	explicit RiffilterAutoLinearTonemap(const RifContextWrapper* rifContext, std::uint32_t width, std::uint32_t height,
+		const std::string& modelsPath);
+	virtual ~RiffilterAutoLinearTonemap();
+
+	virtual void AttachFilter(const RifContextWrapper* rifContext) override;
+};
+
+class RifFilterMaxWhiteTonemap final : public RifFilterWrapper
+{
+public:
+	explicit RifFilterMaxWhiteTonemap(const RifContextWrapper* rifContext, std::uint32_t width, std::uint32_t height,
+		const std::string& modelsPath);
+	virtual ~RifFilterMaxWhiteTonemap();
+
+	virtual void AttachFilter(const RifContextWrapper* rifContext) override;
+};
+
+class RifFilterReinhardTonemap final : public RifFilterWrapper
+{
+public:
+	explicit RifFilterReinhardTonemap(const RifContextWrapper* rifContext, std::uint32_t width, std::uint32_t height,
+		const std::string& modelsPath);
+	virtual ~RifFilterReinhardTonemap();
+
+	virtual void AttachFilter(const RifContextWrapper* rifContext) override;
+};
+
 
