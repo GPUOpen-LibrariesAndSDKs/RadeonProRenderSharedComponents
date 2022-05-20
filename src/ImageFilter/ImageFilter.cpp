@@ -1820,11 +1820,7 @@ RifFilterLinearTonemap::~RifFilterLinearTonemap()
 
 void RifFilterLinearTonemap::AttachFilter(const RifContextWrapper* rifContext)
 {
-	rif_int rifStatus = rifImageFilterSetParameter1f(mRifImageFilterHandle, "key", (rif_float)mParams["key"]);
-	assert(RIF_SUCCESS == rifStatus);
-
-	if (RIF_SUCCESS != rifStatus)
-		throw std::runtime_error("RPR denoiser failed to apply parameters.");
+	rif_int rifStatus = RIF_SUCCESS;
 
 	// attach linear tonemap filter
 	rifStatus = rifCommandQueueAttachImageFilter(rifContext->Queue(), mRifImageFilterHandle,
@@ -1856,20 +1852,7 @@ RifFilterPhotoLinearTonemap::~RifFilterPhotoLinearTonemap()
 
 void RifFilterPhotoLinearTonemap::AttachFilter(const RifContextWrapper* rifContext)
 {
-	// attach params
-	rif_int rifStatus;
-
-	for (const auto& paramPair : mParams)
-	{
-		rifStatus = rifImageFilterSetParameter1f(
-			mRifImageFilterHandle, paramPair.first.c_str(), 
-			(rif_float)paramPair.second
-		);
-		assert(RIF_SUCCESS == rifStatus);
-
-		if (RIF_SUCCESS != rifStatus)
-			throw std::runtime_error("RPR denoiser failed to apply parameters.");
-	}
+	rif_int rifStatus = RIF_SUCCESS;
 
 	// attach photolinear tonemap filter
 	rifStatus = rifCommandQueueAttachImageFilter(rifContext->Queue(), mRifImageFilterHandle,
@@ -1902,11 +1885,7 @@ RiffilterAutoLinearTonemap::~RiffilterAutoLinearTonemap()
 
 void RiffilterAutoLinearTonemap::AttachFilter(const RifContextWrapper* rifContext)
 {
-	rif_int rifStatus = rifImageFilterSetParameter1f(mRifImageFilterHandle, "gamma", (rif_float)mParams["gamma"]);
-	assert(RIF_SUCCESS == rifStatus);
-
-	if (RIF_SUCCESS != rifStatus)
-		throw std::runtime_error("RPR denoiser failed to apply parameters.");
+	rif_int rifStatus = RIF_SUCCESS;
 
 	// attach auto linear tonemap filter
 	rifStatus = rifCommandQueueAttachImageFilter(rifContext->Queue(), mRifImageFilterHandle,
@@ -1938,8 +1917,10 @@ RifFilterMaxWhiteTonemap::~RifFilterMaxWhiteTonemap()
 
 void RifFilterMaxWhiteTonemap::AttachFilter(const RifContextWrapper* rifContext)
 {
+	rif_int rifStatus = RIF_SUCCESS;
+
 	// attach max white tonemap filter
-	rif_int rifStatus = rifCommandQueueAttachImageFilter(rifContext->Queue(), mRifImageFilterHandle,
+	rifStatus = rifCommandQueueAttachImageFilter(rifContext->Queue(), mRifImageFilterHandle,
 		mInputs.at(RifColor)->mRifImage, rifContext->Output());
 	assert(RIF_SUCCESS == rifStatus);
 
@@ -1968,20 +1949,7 @@ RifFilterReinhardTonemap::~RifFilterReinhardTonemap()
 
 void RifFilterReinhardTonemap::AttachFilter(const RifContextWrapper* rifContext)
 {
-	// attach params
-	rif_int rifStatus;
-
-	for (const auto& paramPair : mParams)
-	{
-		rifStatus = rifImageFilterSetParameter1f(
-			mRifImageFilterHandle, paramPair.first.c_str(),
-			(rif_float)paramPair.second
-		);
-		assert(RIF_SUCCESS == rifStatus);
-
-		if (RIF_SUCCESS != rifStatus)
-			throw std::runtime_error("RPR denoiser failed to apply parameters.");
-	}
+	rif_int rifStatus = RIF_SUCCESS;
 
 	// attach Reinhard tonemap filter
 	rifStatus = rifCommandQueueAttachImageFilter(rifContext->Queue(), mRifImageFilterHandle,
