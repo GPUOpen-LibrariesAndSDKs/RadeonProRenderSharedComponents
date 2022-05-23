@@ -168,6 +168,13 @@ public:
     /// Return the global coordinates for a linear table offset.
     Coord offsetToGlobalCoord(Index n) const;
 
+#if OPENVDB_ABI_VERSION_NUMBER >= 9
+    /// Return the transient data value.
+    Index32 transientData() const { return mTransientData; }
+    /// Set the transient data value.
+    void setTransientData(Index32 transientData) { mTransientData = transientData; }
+#endif
+
     /// Return a string representation of this node.
     std::string str() const;
 
@@ -433,7 +440,7 @@ public:
     /// Return @c true if all of this node's values are inactive.
     bool isInactive() const { return mBuffer.mData.isOff(); }
 
-    /// @brief no-op since for this temaplte specialization voxel
+    /// @brief no-op since for this template specialization voxel
     /// values and states are indistinguishable.
     void resetBackground(bool, bool) {}
 
@@ -455,7 +462,7 @@ public:
     ///
     /// @note This operation modifies only active states, not values.
     template<typename OtherType>
-    void topologyUnion(const LeafNode<OtherType, Log2Dim>& other);
+    void topologyUnion(const LeafNode<OtherType, Log2Dim>& other, const bool preserveTiles = false);
 
     /// @brief Intersect this node's set of active values with the active values
     /// of the other node, whose @c ValueType may be different. So a
@@ -467,7 +474,7 @@ public:
     ///
     /// @note This operation modifies only active states, not
     /// values. Also note that this operation can result in all voxels
-    /// being inactive so consider subsequnetly calling prune.
+    /// being inactive so consider subsequently calling prune.
     template<typename OtherType>
     void topologyIntersection(const LeafNode<OtherType, Log2Dim>& other, const bool&);
 
@@ -500,7 +507,7 @@ public:
     /// @brief Calls the templated functor BBoxOp with bounding box information.
     /// An additional level argument is provided to the callback.
     ///
-    /// @note The bounding boxes are guarenteed to be non-overlapping.
+    /// @note The bounding boxes are guaranteed to be non-overlapping.
     template<typename BBoxOp> void visitActiveBBox(BBoxOp&) const;
 
     template<typename VisitorOp> void visit(VisitorOp&);
@@ -731,9 +738,12 @@ protected:
 
     /// Bitmask representing the values AND state of voxels
     Buffer mBuffer;
-
     /// Global grid index coordinates (x,y,z) of the local origin of this node
     Coord mOrigin;
+#if OPENVDB_ABI_VERSION_NUMBER >= 9
+    /// Transient data (not serialized)
+    Index32 mTransientData = 0;
+#endif
 
 private:
     /// @brief During topology-only construction, access is needed
@@ -793,6 +803,9 @@ inline
 LeafNode<ValueMask, Log2Dim>::LeafNode(const LeafNode &other)
     : mBuffer(other.mBuffer)
     , mOrigin(other.mOrigin)
+#if OPENVDB_ABI_VERSION_NUMBER >= 9
+    , mTransientData(other.mTransientData)
+#endif
 {
 }
 
@@ -804,6 +817,9 @@ inline
 LeafNode<ValueMask, Log2Dim>::LeafNode(const LeafNode<ValueT, Log2Dim>& other)
     : mBuffer(other.valueMask())
     , mOrigin(other.origin())
+#if OPENVDB_ABI_VERSION_NUMBER >= 9
+    , mTransientData(other.mTransientData)
+#endif
 {
 }
 
@@ -815,6 +831,9 @@ LeafNode<ValueMask, Log2Dim>::LeafNode(const LeafNode<ValueT, Log2Dim>& other,
                                          bool, TopologyCopy)
     : mBuffer(other.valueMask())// value = active state
     , mOrigin(other.origin())
+#if OPENVDB_ABI_VERSION_NUMBER >= 9
+    , mTransientData(other.mTransientData)
+#endif
 {
 }
 
@@ -825,6 +844,9 @@ inline
 LeafNode<ValueMask, Log2Dim>::LeafNode(const LeafNode<ValueT, Log2Dim>& other, TopologyCopy)
     : mBuffer(other.valueMask())// value = active state
     , mOrigin(other.origin())
+#if OPENVDB_ABI_VERSION_NUMBER >= 9
+    , mTransientData(other.mTransientData)
+#endif
 {
 }
 
@@ -836,6 +858,9 @@ LeafNode<ValueMask, Log2Dim>::LeafNode(const LeafNode<ValueT, Log2Dim>& other,
                                          bool offValue, bool onValue, TopologyCopy)
     : mBuffer(other.valueMask())
     , mOrigin(other.origin())
+#if OPENVDB_ABI_VERSION_NUMBER >= 9
+    , mTransientData(other.mTransientData)
+#endif
 {
     if (offValue==true) {
         if (onValue==false) {
@@ -1236,7 +1261,7 @@ LeafNode<ValueMask, Log2Dim>::merge(bool tileValue, bool)
 template<Index Log2Dim>
 template<typename OtherType>
 inline void
-LeafNode<ValueMask, Log2Dim>::topologyUnion(const LeafNode<OtherType, Log2Dim>& other)
+LeafNode<ValueMask, Log2Dim>::topologyUnion(const LeafNode<OtherType, Log2Dim>& other, bool)
 {
     mBuffer.mData |= other.valueMask();
 }
@@ -1499,18 +1524,10 @@ LeafNode<ValueMask, Log2Dim>::visitActiveBBox(BBoxOp& op) const
 {
     if (op.template descent<LEVEL>()) {
         for (ValueOnCIter i=this->cbeginValueOn(); i; ++i) {
-#ifdef _MSC_VER
-            op.operator()<LEVEL>(CoordBBox::createCube(i.getCoord(), 1));
-#else
             op.template operator()<LEVEL>(CoordBBox::createCube(i.getCoord(), 1));
-#endif
         }
     } else {
-#ifdef _MSC_VER
-        op.operator()<LEVEL>(this->getNodeBoundingBox());
-#else
         op.template operator()<LEVEL>(this->getNodeBoundingBox());
-#endif
     }
 }
 

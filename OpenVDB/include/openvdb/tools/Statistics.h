@@ -3,7 +3,7 @@
 //
 /// @file Statistics.h
 ///
-/// @brief Functions to efficiently compute histograms, extremas
+/// @brief Functions to efficiently compute histograms, extrema
 /// (min/max) and statistics (mean, variance, etc.) of grid values
 
 #ifndef OPENVDB_TOOLS_STATISTICS_HAS_BEEN_INCLUDED
@@ -194,6 +194,7 @@ opExtrema(const IterT& iter, const OperatorT& op = OperatorT(), bool threaded = 
 
 ////////////////////////////////////////
 
+/// @cond OPENVDB_DOCS_INTERNAL
 
 namespace stats_internal {
 
@@ -335,6 +336,7 @@ struct MathOp
 
 } // namespace stats_internal
 
+/// @endcond
 
 template<typename IterT>
 inline math::Histogram

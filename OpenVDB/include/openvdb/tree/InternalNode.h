@@ -108,11 +108,7 @@ public:
     InternalNode(const InternalNode<OtherChildNodeType, Log2Dim>& other,
                  const ValueType& offValue, const ValueType& onValue, TopologyCopy);
 
-#if OPENVDB_ABI_VERSION_NUMBER < 5
-    virtual ~InternalNode();
-#else
     ~InternalNode();
-#endif
 
 protected:
     using MaskOnIterator = typename NodeMaskType::OnIterator;
@@ -251,7 +247,7 @@ public:
     /// @return The level of this node
     /// @details Level 0 is by definition the level of the leaf nodes
     static Index getLevel() { return LEVEL; }
-    /// @brief Populated an stil::vector with the dimension of all the
+    /// @brief Populated an std::vector with the dimension of all the
     /// nodes in the branch starting with this node.
     static void getNodeLog2Dims(std::vector<Index>& dims);
     /// @return The dimension of the child nodes of this node.
@@ -272,9 +268,17 @@ public:
     /// Set the grid index coordinates of this node's local origin.
     void setOrigin(const Coord& origin) { mOrigin = origin; }
 
+#if OPENVDB_ABI_VERSION_NUMBER >= 9
+    /// Return the transient data value.
+    Index32 transientData() const { return mTransientData; }
+    /// Set the transient data value.
+    void setTransientData(Index32 transientData) { mTransientData = transientData; }
+#endif
+
     Index32 leafCount() const;
     void nodeCount(std::vector<Index32> &vec) const;
     Index32 nonLeafCount() const;
+    Index32 childCount() const;
     Index64 onVoxelCount() const;
     Index64 offVoxelCount() const;
     Index64 onLeafVoxelCount() const;
@@ -316,7 +320,7 @@ public:
     /// @param state     Is updated with the state of all values IF method
     ///                  returns @c true. Else the value is undefined!
     /// @param tolerance The tolerance used to determine if values are
-    ///                  approximatly constant.
+    ///                  approximately constant.
     ///
     /// @note This method also returns @c false if this node contains any child nodes.
     bool isConstant(ValueType& minValue, ValueType& maxValue,
@@ -518,7 +522,7 @@ public:
     /// tiles or voxels that were inactive in this branch but active in the other branch
     /// are marked as active in this branch but left with their original values.
     template<typename OtherChildNodeType>
-    void topologyUnion(const InternalNode<OtherChildNodeType, Log2Dim>& other);
+    void topologyUnion(const InternalNode<OtherChildNodeType, Log2Dim>& other, const bool preserveTiles = false);
 
     /// @brief Intersects this tree's set of active values with the active values
     /// of the other tree, whose @c ValueType may be different.
@@ -530,7 +534,7 @@ public:
     ///
     /// @note This operation can delete branches in this grid if they
     /// overlap with inactive tiles in the other grid. Likewise active
-    /// voxels can be turned into unactive voxels resulting in leaf
+    /// voxels can be turned into inactive voxels resulting in leaf
     /// nodes with no active values. Thus, it is recommended to
     /// subsequently call prune.
     template<typename OtherChildNodeType>
@@ -547,7 +551,7 @@ public:
     ///
     /// @note This operation modifies only active states, not
     /// values. Also note that this operation can result in all voxels
-    /// being inactive so consider subsequnetly calling prune.
+    /// being inactive so consider subsequently calling prune.
     template<typename OtherChildNodeType>
     void topologyDifference(const InternalNode<OtherChildNodeType, Log2Dim>& other,
                             const ValueType& background);
@@ -568,7 +572,7 @@ public:
     /// information for all active tiles and leaf nodes in this node.
     /// An additional level argument is provided for each callback.
     ///
-    /// @note The bounding boxes are guarenteed to be non-overlapping.
+    /// @note The bounding boxes are guaranteed to be non-overlapping.
     template<typename BBoxOp> void visitActiveBBox(BBoxOp&) const;
 
     template<typename VisitorOp> void visit(VisitorOp&);
@@ -821,6 +825,10 @@ protected:
     NodeMaskType mChildMask, mValueMask;
     /// Global grid index coordinates (x,y,z) of the local origin of this node
     Coord mOrigin;
+#if OPENVDB_ABI_VERSION_NUMBER >= 9
+    /// Transient data (not serialized)
+    Index32 mTransientData = 0;
+#endif
 }; // class InternalNode
 
 
@@ -900,10 +908,13 @@ struct InternalNode<ChildT, Log2Dim>::DeepCopy
 
 template<typename ChildT, Index Log2Dim>
 inline
-InternalNode<ChildT, Log2Dim>::InternalNode(const InternalNode& other):
-    mChildMask(other.mChildMask),
-    mValueMask(other.mValueMask),
-    mOrigin(other.mOrigin)
+InternalNode<ChildT, Log2Dim>::InternalNode(const InternalNode& other)
+    : mChildMask(other.mChildMask)
+    , mValueMask(other.mValueMask)
+    , mOrigin(other.mOrigin)
+#if OPENVDB_ABI_VERSION_NUMBER >= 9
+    , mTransientData(other.mTransientData)
+#endif
 {
     DeepCopy<InternalNode<ChildT, Log2Dim> > tmp(&other, this);
 }
@@ -917,6 +928,9 @@ InternalNode<ChildT, Log2Dim>::InternalNode(const InternalNode<OtherChildNodeTyp
     : mChildMask(other.mChildMask)
     , mValueMask(other.mValueMask)
     , mOrigin(other.mOrigin)
+#if OPENVDB_ABI_VERSION_NUMBER >= 9
+    , mTransientData(other.mTransientData)
+#endif
 {
     DeepCopy<InternalNode<OtherChildNodeType, Log2Dim> > tmp(&other, this);
 }
@@ -949,10 +963,13 @@ template<typename ChildT, Index Log2Dim>
 template<typename OtherChildNodeType>
 inline
 InternalNode<ChildT, Log2Dim>::InternalNode(const InternalNode<OtherChildNodeType, Log2Dim>& other,
-                                            const ValueType& background, TopologyCopy):
-    mChildMask(other.mChildMask),
-    mValueMask(other.mValueMask),
-    mOrigin(other.mOrigin)
+                                            const ValueType& background, TopologyCopy)
+    : mChildMask(other.mChildMask)
+    , mValueMask(other.mValueMask)
+    , mOrigin(other.mOrigin)
+#if OPENVDB_ABI_VERSION_NUMBER >= 9
+    , mTransientData(other.mTransientData)
+#endif
 {
     TopologyCopy1<InternalNode<OtherChildNodeType, Log2Dim> > tmp(&other, this, background);
 }
@@ -986,10 +1003,13 @@ template<typename OtherChildNodeType>
 inline
 InternalNode<ChildT, Log2Dim>::InternalNode(const InternalNode<OtherChildNodeType, Log2Dim>& other,
                                             const ValueType& offValue,
-                                            const ValueType& onValue, TopologyCopy):
-    mChildMask(other.mChildMask),
-    mValueMask(other.mValueMask),
-    mOrigin(other.mOrigin)
+                                            const ValueType& onValue, TopologyCopy)
+    : mChildMask(other.mChildMask)
+    , mValueMask(other.mValueMask)
+    , mOrigin(other.mOrigin)
+#if OPENVDB_ABI_VERSION_NUMBER >= 9
+    , mTransientData(other.mTransientData)
+#endif
 {
     TopologyCopy2<InternalNode<OtherChildNodeType, Log2Dim> > tmp(&other, this, offValue, onValue);
 }
@@ -1043,6 +1063,14 @@ InternalNode<ChildT, Log2Dim>::nonLeafCount() const
         sum += iter->nonLeafCount();
     }
     return sum;
+}
+
+
+template<typename ChildT, Index Log2Dim>
+inline Index32
+InternalNode<ChildT, Log2Dim>::childCount() const
+{
+    return this->getChildMask().countOn();
 }
 
 
@@ -2497,12 +2525,15 @@ struct InternalNode<ChildT, Log2Dim>::TopologyUnion
     struct A { inline void operator()(W &tV, const W& sV, const W& tC) const
         { tV = (tV | sV) & ~tC; }
     };
-    TopologyUnion(const OtherInternalNode* source, InternalNode* target) : s(source), t(target) {
+    TopologyUnion(const OtherInternalNode* source, InternalNode* target, const bool preserveTiles)
+        : s(source), t(target), mPreserveTiles(preserveTiles) {
         //(*this)(tbb::blocked_range<Index>(0, NUM_VALUES));//single thread for debugging
         tbb::parallel_for(tbb::blocked_range<Index>(0, NUM_VALUES), *this);
 
         // Bit processing is done in a single thread!
-        t->mChildMask |= s->mChildMask;//serial but very fast bitwise post-process
+        if (!mPreserveTiles) t->mChildMask |= s->mChildMask;//serial but very fast bitwise post-process
+        else                 t->mChildMask |= (s->mChildMask & !t->mValueMask);
+
         A op;
         t->mValueMask.foreach(s->mValueMask, t->mChildMask, op);
         assert((t->mValueMask & t->mChildMask).isOff());//no overlapping active tiles or child nodes
@@ -2512,11 +2543,13 @@ struct InternalNode<ChildT, Log2Dim>::TopologyUnion
             if (s->mChildMask.isOn(i)) {// Loop over other node's child nodes
                 const typename OtherInternalNode::ChildNodeType& other = *(s->mNodes[i].getChild());
                 if (t->mChildMask.isOn(i)) {//this has a child node
-                    t->mNodes[i].getChild()->topologyUnion(other);
+                    t->mNodes[i].getChild()->topologyUnion(other, mPreserveTiles);
                 } else {// this is a tile so replace it with a child branch with identical topology
-                    ChildT* child = new ChildT(other, t->mNodes[i].getValue(), TopologyCopy());
-                    if (t->mValueMask.isOn(i)) child->setValuesOn();//activate all values
-                    t->mNodes[i].setChild(child);
+                    if (!mPreserveTiles || t->mValueMask.isOff(i)) { // force child topology
+                        ChildT* child = new ChildT(other, t->mNodes[i].getValue(), TopologyCopy());
+                        if (t->mValueMask.isOn(i)) child->setValuesOn();//activate all values
+                        t->mNodes[i].setChild(child);
+                    }
                 }
             } else if (s->mValueMask.isOn(i) && t->mChildMask.isOn(i)) {
                 t->mNodes[i].getChild()->setValuesOn();
@@ -2525,14 +2558,15 @@ struct InternalNode<ChildT, Log2Dim>::TopologyUnion
     }
     const OtherInternalNode* s;
     InternalNode* t;
+    const bool mPreserveTiles;
 };// TopologyUnion
 
 template<typename ChildT, Index Log2Dim>
 template<typename OtherChildT>
 inline void
-InternalNode<ChildT, Log2Dim>::topologyUnion(const InternalNode<OtherChildT, Log2Dim>& other)
+InternalNode<ChildT, Log2Dim>::topologyUnion(const InternalNode<OtherChildT, Log2Dim>& other, const bool preserveTiles)
 {
-    TopologyUnion<InternalNode<OtherChildT, Log2Dim> > tmp(&other, this);
+    TopologyUnion<InternalNode<OtherChildT, Log2Dim> > tmp(&other, this, preserveTiles);
 }
 
 template<typename ChildT, Index Log2Dim>
@@ -2858,21 +2892,13 @@ inline void
 InternalNode<ChildT, Log2Dim>::visitActiveBBox(BBoxOp& op) const
 {
     for (ValueOnCIter i = this->cbeginValueOn(); i; ++i) {
-#ifdef _MSC_VER
-        op.operator()<LEVEL>(CoordBBox::createCube(i.getCoord(), ChildNodeType::DIM));
-#else
         op.template operator()<LEVEL>(CoordBBox::createCube(i.getCoord(), ChildNodeType::DIM));
-#endif
     }
     if (op.template descent<LEVEL>()) {
         for (ChildOnCIter i = this->cbeginChildOn(); i; ++i) i->visitActiveBBox(op);
     } else {
         for (ChildOnCIter i = this->cbeginChildOn(); i; ++i) {
-#ifdef _MSC_VER
-            op.operator()<LEVEL>(i->getNodeBoundingBox());
-#else
             op.template operator()<LEVEL>(i->getNodeBoundingBox());
-#endif
         }
     }
 }

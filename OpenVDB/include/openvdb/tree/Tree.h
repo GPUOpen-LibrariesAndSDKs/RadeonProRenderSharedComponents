@@ -10,6 +10,7 @@
 #include <openvdb/Metadata.h>
 #include <openvdb/math/Math.h>
 #include <openvdb/math/BBox.h>
+#include <openvdb/tools/Count.h> // tools::countActiveVoxels(), tools::memUsage()
 #include <openvdb/util/Formats.h>
 #include <openvdb/util/logging.h>
 #include <openvdb/Platform.h>
@@ -60,7 +61,7 @@ public:
     virtual Metadata::Ptr getBackgroundValue() const { return Metadata::Ptr(); }
 
     /// @brief Return in @a bbox the axis-aligned bounding box of all
-    /// leaf nodes and active tiles.
+    /// active tiles and leaf nodes with active values.
     /// @details This is faster than calling evalActiveVoxelBoundingBox,
     /// which visits the individual active voxels, and hence
     /// evalLeafBoundingBox produces a less tight, i.e. approximate, bbox.
@@ -95,10 +96,8 @@ public:
     /// are not yet resident in memory because delayed loading is in effect.
     /// @sa readNonresidentBuffers, io::File::open
     virtual void clipUnallocatedNodes() = 0;
-#if OPENVDB_ABI_VERSION_NUMBER >= 4
     /// Return the total number of unallocated leaf nodes residing in this tree.
     virtual Index32 unallocatedLeafCount() const = 0;
-#endif
 
 
     //
@@ -351,20 +350,20 @@ public:
     /// Return the number of non-leaf nodes.
     Index32 nonLeafCount() const override { return mRoot.nonLeafCount(); }
     /// Return the number of active voxels stored in leaf nodes.
-    Index64 activeLeafVoxelCount() const override { return mRoot.onLeafVoxelCount(); }
+    Index64 activeLeafVoxelCount() const override { return tools::countActiveLeafVoxels(*this); }
     /// Return the number of inactive voxels stored in leaf nodes.
-    Index64 inactiveLeafVoxelCount() const override { return mRoot.offLeafVoxelCount(); }
+    Index64 inactiveLeafVoxelCount() const override { return tools::countInactiveLeafVoxels(*this); }
     /// Return the total number of active voxels.
-    Index64 activeVoxelCount() const override { return mRoot.onVoxelCount(); }
+    Index64 activeVoxelCount() const override { return tools::countActiveVoxels(*this); }
     /// Return the number of inactive voxels within the bounding box of all active voxels.
-    Index64 inactiveVoxelCount() const override;
+    Index64 inactiveVoxelCount() const override { return tools::countInactiveVoxels(*this); }
     /// Return the total number of active tiles.
-    Index64 activeTileCount() const override { return mRoot.onTileCount(); }
+    Index64 activeTileCount() const override { return tools::countActiveTiles(*this); }
 
     /// Return the minimum and maximum active values in this tree.
     void evalMinMax(ValueType &min, ValueType &max) const;
 
-    Index64 memUsage() const override { return sizeof(*this) + mRoot.memUsage(); }
+    Index64 memUsage() const override { return tools::memUsage(*this); }
 
 
     //
@@ -462,10 +461,8 @@ public:
     /// @sa readNonresidentBuffers, io::File::open
     void clipUnallocatedNodes() override;
 
-#if OPENVDB_ABI_VERSION_NUMBER >= 4
     /// Return the total number of unallocated leaf nodes residing in this tree.
     Index32 unallocatedLeafCount() const override;
-#endif
 
     //@{
     /// @brief Set all voxels within a given axis-aligned box to a constant value.
@@ -688,8 +685,11 @@ public:
     /// Specifically, active tiles and voxels in this tree are not changed, and
     /// tiles or voxels that were inactive in this tree but active in the other tree
     /// are marked as active in this tree but left with their original values.
+    ///
+    /// @note If preserveTiles is true, any active tile in this topology
+    /// will not be densified by overlapping child topology.
     template<typename OtherRootNodeType>
-    void topologyUnion(const Tree<OtherRootNodeType>& other);
+    void topologyUnion(const Tree<OtherRootNodeType>& other, const bool preserveTiles = false);
 
     /// @brief Intersects this tree's set of active values with the active values
     /// of the other tree, whose @c ValueType may be different.
@@ -701,7 +701,7 @@ public:
     ///
     /// @note This operation can delete branches in this grid if they
     /// overlap with inactive tiles in the other grid. Likewise active
-    /// voxels can be turned into unactive voxels resulting in leaf
+    /// voxels can be turned into inactive voxels resulting in leaf
     /// nodes with no active values. Thus, it is recommended to
     /// subsequently call tools::pruneInactive.
     template<typename OtherRootNodeType>
@@ -933,176 +933,36 @@ public:
         bool prune = false);
 #endif
 
-    /// @brief Use sparse traversal to call the given functor with bounding box
-    /// information for all active tiles and leaf nodes or active voxels in the tree.
-    ///
-    /// @note The bounding boxes are guaranteed to be non-overlapping.
-    /// @param op  a functor with a templated call operator of the form
-    ///     <tt>template<Index LEVEL> void operator()(const CoordBBox& bbox)</tt>,
-    ///     where <tt>bbox</tt> is the bounding box of either an active tile
-    ///     (if @c LEVEL > 0), a leaf node or an active voxel.
-    ///     The functor must also provide a templated method of the form
-    ///     <tt>template<Index LEVEL> bool descent()</tt> that returns @c false
-    ///     if bounding boxes below the specified tree level are not to be visited.
-    ///     In such cases of early tree termination, a bounding box is instead
-    ///     derived from each terminating child node.
-    ///
-    /// @par Example:
-    ///     Visit and process all active tiles and leaf nodes in a tree, but don't
-    ///     descend to the active voxels.  The smallest bounding boxes that will be
-    ///     visited are those of leaf nodes or level-1 active tiles.
-    /// @code
-    /// {
-    ///     struct ProcessTilesAndLeafNodes {
-    ///         // Descend to leaf nodes, but no further.
-    ///         template<Index LEVEL> inline bool descent() { return LEVEL > 0; }
-    ///         // Use this version to descend to voxels:
-    ///         //template<Index LEVEL> inline bool descent() { return true; }
-    ///
-    ///         template<Index LEVEL>
-    ///         inline void operator()(const CoordBBox &bbox) {
-    ///             if (LEVEL > 0) {
-    ///                 // code to process an active tile
-    ///             } else {
-    ///                 // code to process a leaf node
-    ///             }
-    ///         }
-    ///     };
-    ///     ProcessTilesAndLeafNodes op;
-    ///     aTree.visitActiveBBox(op);
-    /// }
-    /// @endcode
-    /// @see openvdb/unittest/TestTree.cc for another example.
-    template<typename BBoxOp> void visitActiveBBox(BBoxOp& op) const { mRoot.visitActiveBBox(op); }
+    template<typename BBoxOp>
+    OPENVDB_DEPRECATED_MESSAGE("Use tools::visitNodesDepthFirst or DynamicNodeManager instead")
+    void visitActiveBBox(BBoxOp& op) const { mRoot.visitActiveBBox(op); }
 
-    /// Traverse this tree in depth-first order, and at each node call the given functor
-    /// with a @c DenseIterator (see Iterator.h) that points to either a child node or a
-    /// tile value.  If the iterator points to a child node and the functor returns true,
-    /// do not descend to the child node; instead, continue the traversal at the next
-    /// iterator position.
-    /// @param op  a functor of the form <tt>template<typename IterT> bool op(IterT&)</tt>,
-    ///            where @c IterT is either a RootNode::ChildAllIter,
-    ///            an InternalNode::ChildAllIter or a LeafNode::ChildAllIter
-    ///
-    /// @note There is no iterator that points to a RootNode, so to visit the root node,
-    /// retrieve the @c parent() of a RootNode::ChildAllIter.
-    ///
-    /// @par Example:
-    ///     Print information about the nodes and tiles of a tree, but not individual voxels.
-    /// @code
-    /// namespace {
-    ///     template<typename TreeT>
-    ///     struct PrintTreeVisitor
-    ///     {
-    ///         using RootT = typename TreeT::RootNodeType;
-    ///         bool visitedRoot;
-    ///
-    ///         PrintTreeVisitor(): visitedRoot(false) {}
-    ///
-    ///         template<typename IterT>
-    ///         inline bool operator()(IterT& iter)
-    ///         {
-    ///             if (!visitedRoot && iter.parent().getLevel() == RootT::LEVEL) {
-    ///                 visitedRoot = true;
-    ///                 std::cout << "Level-" << RootT::LEVEL << " node" << std::endl;
-    ///             }
-    ///             typename IterT::NonConstValueType value;
-    ///             typename IterT::ChildNodeType* child = iter.probeChild(value);
-    ///             if (child == nullptr) {
-    ///                 std::cout << "Tile with value " << value << std::endl;
-    ///                 return true; // no child to visit, so stop descending
-    ///             }
-    ///             std::cout << "Level-" << child->getLevel() << " node" << std::endl;
-    ///             return (child->getLevel() == 0); // don't visit leaf nodes
-    ///         }
-    ///
-    ///         // The generic method, above, calls iter.probeChild(), which is not defined
-    ///         // for LeafNode::ChildAllIter.  These overloads ensure that the generic
-    ///         // method template doesn't get instantiated for LeafNode iterators.
-    ///         bool operator()(typename TreeT::LeafNodeType::ChildAllIter&) { return true; }
-    ///         bool operator()(typename TreeT::LeafNodeType::ChildAllCIter&) { return true; }
-    ///     };
-    /// }
-    /// {
-    ///     PrintTreeVisitor visitor;
-    ///     tree.visit(visitor);
-    /// }
-    /// @endcode
-    template<typename VisitorOp> void visit(VisitorOp& op);
-    template<typename VisitorOp> void visit(const VisitorOp& op);
+    template<typename VisitorOp>
+    OPENVDB_DEPRECATED_MESSAGE("Use tools::visitNodesDepthFirst or DynamicNodeManager instead")
+    void visit(VisitorOp& op);
+    template<typename VisitorOp>
+    OPENVDB_DEPRECATED_MESSAGE("Use tools::visitNodesDepthFirst or DynamicNodeManager instead")
+    void visit(const VisitorOp& op);
 
-    /// Like visit(), but using @c const iterators, i.e., with
-    /// @param op  a functor of the form <tt>template<typename IterT> bool op(IterT&)</tt>,
-    ///            where @c IterT is either a RootNode::ChildAllCIter,
-    ///            an InternalNode::ChildAllCIter or a LeafNode::ChildAllCIter
-    template<typename VisitorOp> void visit(VisitorOp& op) const;
-    template<typename VisitorOp> void visit(const VisitorOp& op) const;
+    template<typename VisitorOp>
+    OPENVDB_DEPRECATED_MESSAGE("Use tools::visitNodesDepthFirst or DynamicNodeManager instead")
+    void visit(VisitorOp& op) const;
+    template<typename VisitorOp>
+    OPENVDB_DEPRECATED_MESSAGE("Use tools::visitNodesDepthFirst or DynamicNodeManager instead")
+    void visit(const VisitorOp& op) const;
 
-    /// Traverse this tree and another tree in depth-first order, and for corresponding
-    /// subregions of index space call the given functor with two @c DenseIterators
-    /// (see Iterator.h), each of which points to either a child node or a tile value
-    /// of this tree and the other tree.  If the A iterator points to a child node
-    /// and the functor returns a nonzero value with bit 0 set (e.g., 1), do not descend
-    /// to the child node; instead, continue the traversal at the next A iterator position.
-    /// Similarly, if the B iterator points to a child node and the functor returns a value
-    /// with bit 1 set (e.g., 2), continue the traversal at the next B iterator position.
-    /// @note The other tree must have the same index space and fan-out factors as
-    /// this tree, but it may have a different @c ValueType and a different topology.
-    /// @param other  a tree of the same type as this tree
-    /// @param op     a functor of the form
-    ///               <tt>template<class AIterT, class BIterT> int op(AIterT&, BIterT&)</tt>,
-    ///               where @c AIterT and @c BIterT are any combination of a
-    ///               RootNode::ChildAllIter, an InternalNode::ChildAllIter or a
-    ///               LeafNode::ChildAllIter with an @c OtherTreeType::RootNode::ChildAllIter,
-    ///               an @c OtherTreeType::InternalNode::ChildAllIter
-    ///               or an @c OtherTreeType::LeafNode::ChildAllIter
-    ///
-    /// @par Example:
-    ///     Given two trees of the same type, @c aTree and @c bTree, replace leaf nodes of
-    ///     @c aTree with corresponding leaf nodes of @c bTree, leaving @c bTree partially empty.
-    /// @code
-    /// namespace {
-    ///     template<typename AIterT, typename BIterT>
-    ///     inline int stealLeafNodes(AIterT& aIter, BIterT& bIter)
-    ///     {
-    ///         typename AIterT::NonConstValueType aValue;
-    ///         typename AIterT::ChildNodeType* aChild = aIter.probeChild(aValue);
-    ///         typename BIterT::NonConstValueType bValue;
-    ///         typename BIterT::ChildNodeType* bChild = bIter.probeChild(bValue);
-    ///
-    ///         const Index aLevel = aChild->getLevel(), bLevel = bChild->getLevel();
-    ///         if (aChild && bChild && aLevel == 0 && bLevel == 0) { // both are leaf nodes
-    ///             aIter.setChild(bChild); // give B's child to A
-    ///             bIter.setValue(bValue); // replace B's child with a constant tile value
-    ///         }
-    ///         // Don't iterate over leaf node voxels of either A or B.
-    ///         int skipBranch = (aLevel == 0) ? 1 : 0;
-    ///         if (bLevel == 0) skipBranch = skipBranch | 2;
-    ///         return skipBranch;
-    ///     }
-    /// }
-    /// {
-    ///     aTree.visit2(bTree, stealLeafNodes);
-    /// }
-    /// @endcode
     template<typename OtherTreeType, typename VisitorOp>
+    OPENVDB_DEPRECATED_MESSAGE("Use tools::visitNodesDepthFirst or DynamicNodeManager instead")
     void visit2(OtherTreeType& other, VisitorOp& op);
     template<typename OtherTreeType, typename VisitorOp>
+    OPENVDB_DEPRECATED_MESSAGE("Use tools::visitNodesDepthFirst or DynamicNodeManager instead")
     void visit2(OtherTreeType& other, const VisitorOp& op);
 
-    /// Like visit2(), but using @c const iterators, i.e., with
-    /// @param other  a tree of the same type as this tree
-    /// @param op     a functor of the form
-    ///               <tt>template<class AIterT, class BIterT> int op(AIterT&, BIterT&)</tt>,
-    ///               where @c AIterT and @c BIterT are any combination of a
-    ///               RootNode::ChildAllCIter, an InternalNode::ChildAllCIter
-    ///               or a LeafNode::ChildAllCIter with an
-    ///               @c OtherTreeType::RootNode::ChildAllCIter,
-    ///               an @c OtherTreeType::InternalNode::ChildAllCIter
-    ///               or an @c OtherTreeType::LeafNode::ChildAllCIter
     template<typename OtherTreeType, typename VisitorOp>
+    OPENVDB_DEPRECATED_MESSAGE("Use tools::visitNodesDepthFirst or DynamicNodeManager instead")
     void visit2(OtherTreeType& other, VisitorOp& op) const;
     template<typename OtherTreeType, typename VisitorOp>
+    OPENVDB_DEPRECATED_MESSAGE("Use tools::visitNodesDepthFirst or DynamicNodeManager instead")
     void visit2(OtherTreeType& other, const VisitorOp& op) const;
 
 
@@ -1768,7 +1628,6 @@ Tree<RootNodeType>::clipUnallocatedNodes()
     }
 }
 
-#if OPENVDB_ABI_VERSION_NUMBER >= 4
 template<typename RootNodeType>
 inline Index32
 Tree<RootNodeType>::unallocatedLeafCount() const
@@ -1777,7 +1636,6 @@ Tree<RootNodeType>::unallocatedLeafCount() const
     for (auto it = this->cbeginLeaf(); it; ++it) if (!it->isAllocated()) ++sum;
     return sum;
 }
-#endif
 
 
 template<typename RootNodeType>
@@ -1847,10 +1705,10 @@ Tree<RootNodeType>::merge(Tree& other, MergePolicy policy)
 template<typename RootNodeType>
 template<typename OtherRootNodeType>
 inline void
-Tree<RootNodeType>::topologyUnion(const Tree<OtherRootNodeType>& other)
+Tree<RootNodeType>::topologyUnion(const Tree<OtherRootNodeType>& other, const bool preserveTiles)
 {
     this->clearAllAccessors();
-    mRoot.topologyUnion(other.root());
+    mRoot.topologyUnion(other.root(), preserveTiles);
 }
 
 template<typename RootNodeType>
@@ -2115,20 +1973,6 @@ Tree<RootNodeType>::hasSameTopology(const Tree<OtherRootNodeType>& other) const
 
 
 template<typename RootNodeType>
-Index64
-Tree<RootNodeType>::inactiveVoxelCount() const
-{
-    Coord dim(0, 0, 0);
-    this->evalActiveVoxelDim(dim);
-    const Index64
-        totalVoxels = dim.x() * dim.y() * dim.z(),
-        activeVoxels = this->activeVoxelCount();
-    assert(totalVoxels >= activeVoxels);
-    return totalVoxels - activeVoxels;
-}
-
-
-template<typename RootNodeType>
 inline bool
 Tree<RootNodeType>::evalLeafBoundingBox(CoordBBox& bbox) const
 {
@@ -2138,7 +1982,7 @@ Tree<RootNodeType>::evalLeafBoundingBox(CoordBBox& bbox) const
 
     mRoot.evalActiveBoundingBox(bbox, false);
 
-    return true;// not empty
+    return !bbox.empty();
 }
 
 template<typename RootNodeType>
@@ -2151,7 +1995,7 @@ Tree<RootNodeType>::evalActiveVoxelBoundingBox(CoordBBox& bbox) const
 
     mRoot.evalActiveBoundingBox(bbox, true);
 
-    return true;// not empty
+    return !bbox.empty();
 }
 
 
@@ -2187,8 +2031,8 @@ Tree<RootNodeType>::evalMinMax(ValueType& minVal, ValueType& maxVal) const
         minVal = maxVal = *iter;
         for (++iter; iter; ++iter) {
             const ValueType& val = *iter;
-            if (val < minVal) minVal = val;
-            if (val > maxVal) maxVal = val;
+            if (math::cwiseLessThan(val, minVal)) minVal = val;
+            if (math::cwiseGreaterThan(val, maxVal)) maxVal = val;
         }
     }
 }

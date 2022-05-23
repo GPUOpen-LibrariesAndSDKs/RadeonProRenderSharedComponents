@@ -24,6 +24,7 @@
 #include <openvdb/math/Math.h>
 #include <openvdb/tools/RayIntersector.h>
 #include <openvdb/tools/Interpolation.h>
+#include <openvdb/openvdb.h>
 #include <deque>
 #include <iostream>
 #include <fstream>
@@ -32,14 +33,6 @@
 #include <string>
 #include <type_traits>
 #include <vector>
-
-#ifdef OPENVDB_TOOLS_RAYTRACER_USE_EXR
-#include <OpenEXR/ImfPixelType.h>
-#include <OpenEXR/ImfChannelList.h>
-#include <OpenEXR/ImfOutputFile.h>
-#include <OpenEXR/ImfHeader.h>
-#include <OpenEXR/ImfFrameBuffer.h>
-#endif
 
 namespace openvdb {
 OPENVDB_USE_VERSION_NAMESPACE
@@ -52,22 +45,22 @@ class BaseShader;
 
 /// @brief Ray-trace a volume.
 template<typename GridT>
-inline void rayTrace(const GridT&,
-                     const BaseShader&,
-                     BaseCamera&,
-                     size_t pixelSamples = 1,
-                     unsigned int seed = 0,
-                     bool threaded = true);
+void rayTrace(const GridT&,
+              const BaseShader&,
+              BaseCamera&,
+              size_t pixelSamples = 1,
+              unsigned int seed = 0,
+              bool threaded = true);
 
 /// @brief Ray-trace a volume using a given ray intersector.
 template<typename GridT, typename IntersectorT>
-inline void rayTrace(const GridT&,
-                     const IntersectorT&,
-                     const BaseShader&,
-                     BaseCamera&,
-                     size_t pixelSamples = 1,
-                     unsigned int seed = 0,
-                     bool threaded = true);
+void rayTrace(const GridT&,
+              const IntersectorT&,
+              const BaseShader&,
+              BaseCamera&,
+              size_t pixelSamples = 1,
+              unsigned int seed = 0,
+              bool threaded = true);
 
 
 ///////////////////////////////LEVEL SET RAY TRACER ///////////////////////////////////////
@@ -228,7 +221,7 @@ private:
 //////////////////////////////////////// FILM ////////////////////////////////////////
 
 /// @brief A simple class that allows for concurrent writes to pixels in an image,
-/// background initialization of the image, and PPM or EXR file output.
+/// background initialization of the image, and PPM file output.
 class Film
 {
 public:
@@ -303,20 +296,29 @@ public:
         }
     }
 
+    template <typename Type = unsigned char>
+    std::unique_ptr<Type[]> convertToBitBuffer(const bool alpha = true) const
+    {
+        const size_t totalSize = mSize * (alpha ? 4 : 3);
+        std::unique_ptr<Type[]> buffer(new Type[totalSize]);
+        Type *q = buffer.get();
+        const RGBA* p = this->pixels();
+        size_t n = mSize;
+        while (n--) {
+            *q++ = static_cast<Type>(255.0f*(*p).r);
+            *q++ = static_cast<Type>(255.0f*(*p).g);
+            *q++ = static_cast<Type>(255.0f*(*p).b);
+            if(alpha)
+                *q++ = static_cast<Type>(255.0f*(*p).a);
+            ++p;
+        }
+        return buffer;
+    }
+
     void savePPM(const std::string& fileName)
     {
         std::string name(fileName);
         if (name.find_last_of(".") == std::string::npos) name.append(".ppm");
-
-        std::unique_ptr<unsigned char[]> buffer(new unsigned char[3*mSize]);
-        unsigned char *tmp = buffer.get(), *q = tmp;
-        RGBA* p = mPixels.get();
-        size_t n = mSize;
-        while (n--) {
-            *q++ = static_cast<unsigned char>(255.0f*(*p  ).r);
-            *q++ = static_cast<unsigned char>(255.0f*(*p  ).g);
-            *q++ = static_cast<unsigned char>(255.0f*(*p++).b);
-        }
 
         std::ofstream os(name.c_str(), std::ios_base::binary);
         if (!os.is_open()) {
@@ -324,41 +326,12 @@ public:
             return;
         }
 
+        auto buf = this->convertToBitBuffer<unsigned char>(/*alpha=*/false);
+        unsigned char* tmp = buf.get();
+
         os << "P6\n" << mWidth << " " << mHeight << "\n255\n";
         os.write(reinterpret_cast<const char*>(&(*tmp)), 3 * mSize * sizeof(unsigned char));
     }
-
-#ifdef OPENVDB_TOOLS_RAYTRACER_USE_EXR
-    void saveEXR(const std::string& fileName, size_t compression = 2, size_t threads = 8)
-    {
-        std::string name(fileName);
-        if (name.find_last_of(".") == std::string::npos) name.append(".exr");
-
-        if (threads>0) Imf::setGlobalThreadCount(threads);
-        Imf::Header header(mWidth, mHeight);
-        if (compression==0) header.compression() = Imf::NO_COMPRESSION;
-        if (compression==1) header.compression() = Imf::RLE_COMPRESSION;
-        if (compression>=2) header.compression() = Imf::ZIP_COMPRESSION;
-        header.channels().insert("R", Imf::Channel(Imf::FLOAT));
-        header.channels().insert("G", Imf::Channel(Imf::FLOAT));
-        header.channels().insert("B", Imf::Channel(Imf::FLOAT));
-        header.channels().insert("A", Imf::Channel(Imf::FLOAT));
-
-        Imf::FrameBuffer framebuffer;
-        framebuffer.insert("R", Imf::Slice( Imf::FLOAT, (char *) &(mPixels[0].r),
-                                            sizeof (RGBA), sizeof (RGBA) * mWidth));
-        framebuffer.insert("G", Imf::Slice( Imf::FLOAT, (char *) &(mPixels[0].g),
-                                            sizeof (RGBA), sizeof (RGBA) * mWidth));
-        framebuffer.insert("B", Imf::Slice( Imf::FLOAT, (char *) &(mPixels[0].b),
-                                            sizeof (RGBA), sizeof (RGBA) * mWidth));
-        framebuffer.insert("A", Imf::Slice( Imf::FLOAT, (char *) &(mPixels[0].a),
-                                            sizeof (RGBA), sizeof (RGBA) * mWidth));
-
-        Imf::OutputFile file(name.c_str(), header);
-        file.setFrameBuffer(framebuffer);
-        file.writePixels(mHeight);
-    }
-#endif
 
     size_t width()       const { return mWidth; }
     size_t height()      const { return mHeight; }
@@ -774,12 +747,12 @@ private:
 //////////////////////////////////////// RAYTRACER ////////////////////////////////////////
 
 template<typename GridT>
-inline void rayTrace(const GridT& grid,
-                     const BaseShader& shader,
-                     BaseCamera& camera,
-                     size_t pixelSamples,
-                     unsigned int seed,
-                     bool threaded)
+void rayTrace(const GridT& grid,
+              const BaseShader& shader,
+              BaseCamera& camera,
+              size_t pixelSamples,
+              unsigned int seed,
+              bool threaded)
 {
     LevelSetRayTracer<GridT, tools::LevelSetRayIntersector<GridT> >
         tracer(grid, shader, camera, pixelSamples, seed);
@@ -788,13 +761,13 @@ inline void rayTrace(const GridT& grid,
 
 
 template<typename GridT, typename IntersectorT>
-inline void rayTrace(const GridT&,
-                     const IntersectorT& inter,
-                     const BaseShader& shader,
-                     BaseCamera& camera,
-                     size_t pixelSamples,
-                     unsigned int seed,
-                     bool threaded)
+void rayTrace(const GridT&,
+              const IntersectorT& inter,
+              const BaseShader& shader,
+              BaseCamera& camera,
+              size_t pixelSamples,
+              unsigned int seed,
+              bool threaded)
 {
     LevelSetRayTracer<GridT, IntersectorT> tracer(inter, shader, camera, pixelSamples, seed);
     tracer.render(threaded);
@@ -1086,6 +1059,34 @@ operator()(const tbb::blocked_range<size_t>& range) const
      }//Horizontal pixel scan
    }//Vertical pixel scan
 }
+
+
+////////////////////////////////////////
+
+
+// Explicit Template Instantiation
+
+#ifdef OPENVDB_USE_EXPLICIT_INSTANTIATION
+
+#ifdef OPENVDB_INSTANTIATE_RAYTRACER
+#include <openvdb/util/ExplicitInstantiation.h>
+#endif
+
+#define _FUNCTION(TreeT) \
+    void rayTrace(const Grid<TreeT>&, const BaseShader&, BaseCamera&, size_t, unsigned int, bool)
+OPENVDB_REAL_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#define _FUNCTION(TreeT) \
+    void rayTrace(const Grid<TreeT>&, const tools::LevelSetRayIntersector<Grid<TreeT>>&, const BaseShader&, BaseCamera&, size_t, unsigned int, bool)
+OPENVDB_REAL_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+OPENVDB_INSTANTIATE_CLASS VolumeRender<tools::VolumeRayIntersector<FloatGrid>, tools::BoxSampler>;
+OPENVDB_INSTANTIATE_CLASS VolumeRender<tools::VolumeRayIntersector<DoubleGrid>, tools::BoxSampler>;
+
+#endif // OPENVDB_USE_EXPLICIT_INSTANTIATION
+
 
 } // namespace tools
 } // namespace OPENVDB_VERSION_NAME

@@ -131,6 +131,7 @@ Index64 pointOffsets(   std::vector<Index64>& pointOffsets,
     // allocate and zero values in point offsets array
 
     pointOffsets.assign(tree.leafCount(), Index64(0));
+    if (pointOffsets.empty()) return 0;
 
     // compute total points per-leaf
 
@@ -194,124 +195,6 @@ pointCountGrid( const PointDataGridT& points,
     NullDeformer deformer;
     return point_mask_internal::convertPointsToScalar<GridT>(
         nonConstPoints, transform, filter, deformer);
-}
-
-
-////////////////////////////////////////
-
-
-// deprecated functions
-
-
-template <typename PointDataTreeT>
-OPENVDB_DEPRECATED
-inline Index64 pointCount(const PointDataTreeT& tree, const bool inCoreOnly)
-{
-    NullFilter filter;
-    return pointCount(tree, filter, inCoreOnly);
-}
-
-
-template <typename PointDataTreeT>
-OPENVDB_DEPRECATED
-inline Index64 activePointCount(const PointDataTreeT& tree, const bool inCoreOnly = true)
-{
-    ActiveFilter filter;
-    return pointCount(tree, filter, inCoreOnly);
-}
-
-
-template <typename PointDataTreeT>
-OPENVDB_DEPRECATED
-inline Index64 inactivePointCount(const PointDataTreeT& tree, const bool inCoreOnly = true)
-{
-    InactiveFilter filter;
-    return pointCount(tree, filter, inCoreOnly);
-}
-
-
-template <typename PointDataTreeT>
-OPENVDB_DEPRECATED
-inline Index64 groupPointCount(const PointDataTreeT& tree, const Name& name,
-    const bool inCoreOnly = true)
-{
-    auto iter = tree.cbeginLeaf();
-    if (!iter || !iter->attributeSet().descriptor().hasGroup(name)) {
-        return Index64(0);
-    }
-    GroupFilter filter(name, iter->attributeSet());
-    return pointCount(tree, filter, inCoreOnly);
-}
-
-
-template <typename PointDataTreeT>
-OPENVDB_DEPRECATED
-inline Index64 activeGroupPointCount(const PointDataTreeT& tree, const Name& name,
-    const bool inCoreOnly = true)
-{
-    auto iter = tree.cbeginLeaf();
-    if (!iter || !iter->attributeSet().descriptor().hasGroup(name)) {
-        return Index64(0);
-    }
-    BinaryFilter<GroupFilter, ActiveFilter> filter(GroupFilter(name, iter->attributeSet()), ActiveFilter());
-    return pointCount(tree, filter, inCoreOnly);
-}
-
-
-template <typename PointDataTreeT>
-OPENVDB_DEPRECATED
-inline Index64 inactiveGroupPointCount(const PointDataTreeT& tree, const Name& name,
-    const bool inCoreOnly = true)
-{
-    auto iter = tree.cbeginLeaf();
-    if (!iter || !iter->attributeSet().descriptor().hasGroup(name)) {
-        return Index64(0);
-    }
-    BinaryFilter<GroupFilter, InactiveFilter> filter(GroupFilter(name, iter->attributeSet()), InactiveFilter());
-    return pointCount(tree, filter, inCoreOnly);
-}
-
-
-template <typename PointDataTreeT>
-OPENVDB_DEPRECATED
-inline Index64 getPointOffsets(std::vector<Index64>& offsets, const PointDataTreeT& tree,
-                        const std::vector<Name>& includeGroups,
-                        const std::vector<Name>& excludeGroups,
-                        const bool inCoreOnly = false)
-{
-    MultiGroupFilter filter(includeGroups, excludeGroups, tree.cbeginLeaf()->attributeSet());
-    return pointOffsets(offsets, tree, filter, inCoreOnly);
-}
-
-
-template <typename PointDataGridT,
-    typename GridT = typename PointDataGridT::template ValueConverter<Int32>::Type>
-OPENVDB_DEPRECATED
-inline typename GridT::Ptr
-pointCountGrid(const PointDataGridT& grid,
-    const std::vector<Name>& includeGroups,
-    const std::vector<Name>& excludeGroups)
-{
-    auto leaf = grid.tree().cbeginLeaf();
-    if (!leaf)  return GridT::create(0);
-    MultiGroupFilter filter(includeGroups, excludeGroups, leaf->attributeSet());
-    return pointCountGrid(grid, filter);
-}
-
-
-template <typename PointDataGridT,
-    typename GridT = typename PointDataGridT::template ValueConverter<Int32>::Type>
-OPENVDB_DEPRECATED
-inline typename GridT::Ptr
-pointCountGrid(const PointDataGridT& grid,
-    const openvdb::math::Transform& transform,
-    const std::vector<Name>& includeGroups,
-    const std::vector<Name>& excludeGroups)
-{
-    auto leaf = grid.tree().cbeginLeaf();
-    if (!leaf)  return GridT::create(0);
-    MultiGroupFilter filter(includeGroups, excludeGroups, leaf->attributeSet());
-    return pointCountGrid(grid, transform, filter);
 }
 
 

@@ -6,7 +6,30 @@
 
 #include "version.h"
 #include "Platform.h"
+#include "TypeList.h" // backwards compat
+
+#ifdef OPENVDB_USE_IMATH_HALF
+#ifdef OPENVDB_IMATH_VERSION
+#include <Imath/half.h>
+#else
 #include <OpenEXR/half.h>
+#endif
+namespace openvdb {
+OPENVDB_USE_VERSION_NAMESPACE
+namespace OPENVDB_VERSION_NAME {
+namespace math {
+using half = half;
+}}}
+#else
+#include <openvdb/math/Half.h>
+namespace openvdb {
+OPENVDB_USE_VERSION_NAMESPACE
+namespace OPENVDB_VERSION_NAME {
+namespace math {
+using half = internal::half;
+}}}
+#endif
+
 #include <openvdb/math/Math.h>
 #include <openvdb/math/BBox.h>
 #include <openvdb/math/Quat.h>
@@ -40,7 +63,7 @@ using Real    = double;
 using Vec2R = math::Vec2<Real>;
 using Vec2I = math::Vec2<Index32>;
 using Vec2f = math::Vec2<float>;
-using Vec2H = math::Vec2<half>;
+using Vec2H = math::Vec2<math::half>;
 using math::Vec2i;
 using math::Vec2s;
 using math::Vec2d;
@@ -49,7 +72,7 @@ using math::Vec2d;
 using Vec3R = math::Vec3<Real>;
 using Vec3I = math::Vec3<Index32>;
 using Vec3f = math::Vec3<float>;
-using Vec3H = math::Vec3<half>;
+using Vec3H = math::Vec3<math::half>;
 using Vec3U8 = math::Vec3<uint8_t>;
 using Vec3U16 = math::Vec3<uint16_t>;
 using math::Vec3i;
@@ -64,7 +87,7 @@ using BBoxd = math::BBox<Vec3d>;
 using Vec4R = math::Vec4<Real>;
 using Vec4I = math::Vec4<Index32>;
 using Vec4f = math::Vec4<float>;
-using Vec4H = math::Vec4<half>;
+using Vec4H = math::Vec4<math::half>;
 using math::Vec4i;
 using math::Vec4s;
 using math::Vec4d;
@@ -298,151 +321,11 @@ template<typename FromType, typename ToType> struct CopyConstness {
     using Type = typename std::remove_const<ToType>::type;
 };
 
-/// @cond OPENVDB_TYPES_INTERNAL
+/// @cond OPENVDB_DOCS_INTERNAL
 template<typename FromType, typename ToType> struct CopyConstness<const FromType, ToType> {
     using Type = const ToType;
 };
 /// @endcond
-
-
-////////////////////////////////////////
-
-
-/// @cond OPENVDB_TYPES_INTERNAL
-
-template<typename... Ts> struct TypeList; // forward declaration
-
-namespace internal {
-
-// Implementation details of TypeList
-
-template<typename ListT, typename... Ts> struct TSAppendImpl;
-
-// Append zero or more types.
-template<typename... Ts, typename... OtherTs>
-struct TSAppendImpl<TypeList<Ts...>, OtherTs...> {
-    using type = TypeList<Ts..., OtherTs...>;
-};
-
-// Append another TypeList's members.
-template<typename... Ts, typename... OtherTs>
-struct TSAppendImpl<TypeList<Ts...>, TypeList<OtherTs...>> {
-    using type = TypeList<Ts..., OtherTs...>;
-};
-
-
-// Remove all occurrences of type T.
-template<typename ListT, typename T> struct TSEraseImpl;
-
-// TypeList<>::Erase<int> = TypeList<>
-template<typename T>
-struct TSEraseImpl<TypeList<>, T> { using type = TypeList<>; };
-
-// TypeList<int, char, ...>::Erase<int> = TypeList<char, ...>::Erase<int>
-template<typename... Ts, typename T>
-struct TSEraseImpl<TypeList<T, Ts...>, T> {
-    using type = typename TSEraseImpl<TypeList<Ts...>, T>::type;
-};
-
-// TypeList<float, int, char...>::Erase<int> =
-//     TypeList<float>::Append<TypeList<int, char...>::Erase<int>>
-template<typename T2, typename... Ts, typename T>
-struct TSEraseImpl<TypeList<T2, Ts...>, T> {
-    using type = typename TSAppendImpl<TypeList<T2>,
-        typename TSEraseImpl<TypeList<Ts...>, T>::type>::type;
-};
-
-
-template<typename ListT, typename... Ts> struct TSRemoveImpl;
-
-template<typename ListT>
-struct TSRemoveImpl<ListT> { using type = ListT; };
-
-// Remove one or more types.
-template<typename ListT, typename T, typename... Ts>
-struct TSRemoveImpl<ListT, T, Ts...> {
-    using type = typename TSRemoveImpl<typename TSEraseImpl<ListT, T>::type, Ts...>::type;
-};
-
-// Remove the members of another TypeList.
-template<typename ListT, typename... Ts>
-struct TSRemoveImpl<ListT, TypeList<Ts...>> {
-    using type = typename TSRemoveImpl<ListT, Ts...>::type;
-};
-
-
-template<typename OpT> inline void TSForEachImpl(OpT) {}
-template<typename OpT, typename T, typename... Ts>
-inline void TSForEachImpl(OpT op) { op(T()); TSForEachImpl<OpT, Ts...>(op); }
-
-} // namespace internal
-
-/// @endcond
-
-
-/// @brief A list of types (not necessarily unique)
-/// @details Example:
-/// @code
-/// using MyTypes = openvdb::TypeList<int, float, int, double, float>;
-/// @endcode
-template<typename... Ts>
-struct TypeList
-{
-    /// The type of this list
-    using Self = TypeList;
-
-    /// @brief Append types, or the members of another TypeList, to this list.
-    /// @details Example:
-    /// @code
-    /// {
-    ///     using IntTypes = openvdb::TypeList<Int16, Int32, Int64>;
-    ///     using RealTypes = openvdb::TypeList<float, double>;
-    ///     using NumericTypes = IntTypes::Append<RealTypes>;
-    /// }
-    /// {
-    ///     using IntTypes = openvdb::TypeList<Int16>::Append<Int32, Int64>;
-    ///     using NumericTypes = IntTypes::Append<float>::Append<double>;
-    /// }
-    /// @endcode
-    template<typename... TypesToAppend>
-    using Append = typename internal::TSAppendImpl<Self, TypesToAppend...>::type;
-
-    /// @brief Remove all occurrences of one or more types, or the members of
-    /// another TypeList, from this list.
-    /// @details Example:
-    /// @code
-    /// {
-    ///     using NumericTypes = openvdb::TypeList<float, double, Int16, Int32, Int64>;
-    ///     using LongTypes = openvdb::TypeList<Int64, double>;
-    ///     using ShortTypes = NumericTypes::Remove<LongTypes>; // float, Int16, Int32
-    /// }
-    /// @endcode
-    template<typename... TypesToRemove>
-    using Remove = typename internal::TSRemoveImpl<Self, TypesToRemove...>::type;
-
-    /// @brief Invoke a templated, unary functor on a value of each type in this list.
-    /// @details Example:
-    /// @code
-    /// #include <typeinfo>
-    ///
-    /// template<typename ListT>
-    /// void printTypeList()
-    /// {
-    ///     std::string sep;
-    ///     auto op = [&](auto x) {  // C++14
-    ///         std::cout << sep << typeid(decltype(x)).name(); sep = ", "; };
-    ///     ListT::foreach(op);
-    /// }
-    ///
-    /// using MyTypes = openvdb::TypeList<int, float, double>;
-    /// printTypeList<MyTypes>(); // "i, f, d" (exact output is compiler-dependent)
-    /// @endcode
-    ///
-    /// @note The functor object is passed by value.  Wrap it with @c std::ref
-    /// to use the same object for each type.
-    template<typename OpT>
-    static void foreach(OpT op) { internal::TSForEachImpl<OpT, Ts...>(op); }
-};
 
 
 ////////////////////////////////////////
@@ -515,7 +398,7 @@ enum MergePolicy {
 template<typename T> const char* typeNameAsString()                 { return typeid(T).name(); }
 template<> inline const char* typeNameAsString<bool>()              { return "bool"; }
 template<> inline const char* typeNameAsString<ValueMask>()         { return "mask"; }
-template<> inline const char* typeNameAsString<half>()              { return "half"; }
+template<> inline const char* typeNameAsString<math::half>()              { return "half"; }
 template<> inline const char* typeNameAsString<float>()             { return "float"; }
 template<> inline const char* typeNameAsString<double>()            { return "double"; }
 template<> inline const char* typeNameAsString<int8_t>()            { return "int8"; }
@@ -679,61 +562,15 @@ class ShallowCopy {};
 /// @brief Tag dispatch class that distinguishes topology copy constructors
 /// from deep copy constructors
 class TopologyCopy {};
+/// @brief Tag dispatch class that distinguishes constructors that deep copy
+class DeepCopy {};
+/// @brief Tag dispatch class that distinguishes constructors that steal
+class Steal {};
 /// @brief Tag dispatch class that distinguishes constructors during file input
 class PartialCreate {};
 
 } // namespace OPENVDB_VERSION_NAME
 } // namespace openvdb
 
-
-#if defined(__ICC)
-
-// Use these defines to bracket a region of code that has safe static accesses.
-// Keep the region as small as possible.
-#define OPENVDB_START_THREADSAFE_STATIC_REFERENCE   __pragma(warning(disable:1710))
-#define OPENVDB_FINISH_THREADSAFE_STATIC_REFERENCE  __pragma(warning(default:1710))
-#define OPENVDB_START_THREADSAFE_STATIC_WRITE       __pragma(warning(disable:1711))
-#define OPENVDB_FINISH_THREADSAFE_STATIC_WRITE      __pragma(warning(default:1711))
-#define OPENVDB_START_THREADSAFE_STATIC_ADDRESS     __pragma(warning(disable:1712))
-#define OPENVDB_FINISH_THREADSAFE_STATIC_ADDRESS    __pragma(warning(default:1712))
-
-// Use these defines to bracket a region of code that has unsafe static accesses.
-// Keep the region as small as possible.
-#define OPENVDB_START_NON_THREADSAFE_STATIC_REFERENCE   __pragma(warning(disable:1710))
-#define OPENVDB_FINISH_NON_THREADSAFE_STATIC_REFERENCE  __pragma(warning(default:1710))
-#define OPENVDB_START_NON_THREADSAFE_STATIC_WRITE       __pragma(warning(disable:1711))
-#define OPENVDB_FINISH_NON_THREADSAFE_STATIC_WRITE      __pragma(warning(default:1711))
-#define OPENVDB_START_NON_THREADSAFE_STATIC_ADDRESS     __pragma(warning(disable:1712))
-#define OPENVDB_FINISH_NON_THREADSAFE_STATIC_ADDRESS    __pragma(warning(default:1712))
-
-// Simpler version for one-line cases
-#define OPENVDB_THREADSAFE_STATIC_REFERENCE(CODE) \
-    __pragma(warning(disable:1710)); CODE; __pragma(warning(default:1710))
-#define OPENVDB_THREADSAFE_STATIC_WRITE(CODE) \
-    __pragma(warning(disable:1711)); CODE; __pragma(warning(default:1711))
-#define OPENVDB_THREADSAFE_STATIC_ADDRESS(CODE) \
-    __pragma(warning(disable:1712)); CODE; __pragma(warning(default:1712))
-
-#else // GCC does not support these compiler warnings
-
-#define OPENVDB_START_THREADSAFE_STATIC_REFERENCE
-#define OPENVDB_FINISH_THREADSAFE_STATIC_REFERENCE
-#define OPENVDB_START_THREADSAFE_STATIC_WRITE
-#define OPENVDB_FINISH_THREADSAFE_STATIC_WRITE
-#define OPENVDB_START_THREADSAFE_STATIC_ADDRESS
-#define OPENVDB_FINISH_THREADSAFE_STATIC_ADDRESS
-
-#define OPENVDB_START_NON_THREADSAFE_STATIC_REFERENCE
-#define OPENVDB_FINISH_NON_THREADSAFE_STATIC_REFERENCE
-#define OPENVDB_START_NON_THREADSAFE_STATIC_WRITE
-#define OPENVDB_FINISH_NON_THREADSAFE_STATIC_WRITE
-#define OPENVDB_START_NON_THREADSAFE_STATIC_ADDRESS
-#define OPENVDB_FINISH_NON_THREADSAFE_STATIC_ADDRESS
-
-#define OPENVDB_THREADSAFE_STATIC_REFERENCE(CODE) CODE
-#define OPENVDB_THREADSAFE_STATIC_WRITE(CODE) CODE
-#define OPENVDB_THREADSAFE_STATIC_ADDRESS(CODE) CODE
-
-#endif // defined(__ICC)
 
 #endif // OPENVDB_TYPES_HAS_BEEN_INCLUDED

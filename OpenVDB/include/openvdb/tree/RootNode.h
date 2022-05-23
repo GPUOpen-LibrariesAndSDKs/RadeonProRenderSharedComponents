@@ -15,11 +15,6 @@
 #include <openvdb/math/BBox.h>
 #include <openvdb/util/NodeMasks.h> // for backward compatibility only (see readTopology())
 #include <openvdb/version.h>
-#include <boost/mpl/contains.hpp>
-#include <boost/mpl/vector.hpp>//for boost::mpl::vector
-#include <boost/mpl/at.hpp>
-#include <boost/mpl/push_back.hpp>
-#include <boost/mpl/size.hpp>
 #include <tbb/parallel_for.h>
 #include <map>
 #include <set>
@@ -52,7 +47,7 @@ public:
 
     /// NodeChainType is a list of this tree's node types, from LeafNodeType to RootNode.
     using NodeChainType = typename NodeChain<RootNode, LEVEL>::Type;
-    static_assert(boost::mpl::size<NodeChainType>::value == LEVEL + 1,
+    static_assert(NodeChainType::Size == LEVEL + 1,
         "wrong number of entries in RootNode node chain");
 
     /// @brief ValueConverter<T>::Type is the type of a RootNode having the same
@@ -410,6 +405,13 @@ public:
     /// Return the bounding box of this RootNode, i.e., an infinite bounding box.
     static CoordBBox getNodeBoundingBox() { return CoordBBox::inf(); }
 
+#if OPENVDB_ABI_VERSION_NUMBER >= 9
+    /// Return the transient data value.
+    Index32 transientData() const { return mTransientData; }
+    /// Set the transient data value.
+    void setTransientData(Index32 transientData) { mTransientData = transientData; }
+#endif
+
     /// @brief Change inactive tiles or voxels with a value equal to +/- the
     /// old background to the specified value (with the same sign). Active values
     /// are unchanged.
@@ -484,6 +486,7 @@ public:
 
     Index32 leafCount() const;
     Index32 nonLeafCount() const;
+    Index32 childCount() const;
     Index64 onVoxelCount() const;
     Index64 offVoxelCount() const;
     Index64 onLeafVoxelCount() const;
@@ -837,8 +840,11 @@ public:
     /// Specifically, active tiles and voxels in this tree are not changed, and
     /// tiles or voxels that were inactive in this tree but active in the other tree
     /// are marked as active in this tree but left with their original values.
+    ///
+    /// @note If preserveTiles is true, any active tile in this topology
+    /// will not be densified by overlapping child topology.
     template<typename OtherChildType>
-    void topologyUnion(const RootNode<OtherChildType>& other);
+    void topologyUnion(const RootNode<OtherChildType>& other, const bool preserveTiles = false);
 
     /// @brief Intersects this tree's set of active values with the active values
     /// of the other tree, whose @c ValueType may be different.
@@ -907,7 +913,9 @@ private:
     void resetTable(const MapType&) const {}
     //@}
 
+#if OPENVDB_ABI_VERSION_NUMBER < 8
     Index getChildCount() const;
+#endif
     Index getTileCount() const;
     Index getActiveTileCount() const;
     Index getInactiveTileCount() const;
@@ -965,13 +973,17 @@ private:
 
     MapType mTable;
     ValueType mBackground;
+#if OPENVDB_ABI_VERSION_NUMBER >= 9
+    /// Transient Data (not serialized)
+    Index32 mTransientData = 0;
+#endif
 }; // end of RootNode class
 
 
 ////////////////////////////////////////
 
 
-/// @brief NodeChain<RootNodeType, RootNodeType::LEVEL>::Type is a boost::mpl::vector
+/// @brief NodeChain<RootNodeType, RootNodeType::LEVEL>::Type is a openvdb::TypeList
 /// that lists the types of the nodes of the tree rooted at RootNodeType in reverse order,
 /// from LeafNode to RootNode.
 /// @details For example, if RootNodeType is
@@ -980,7 +992,7 @@ private:
 /// @endcode
 /// then NodeChain::Type is
 /// @code
-/// boost::mpl::vector<
+/// openvdb::TypeList<
 ///     LeafNode,
 ///     InternalNode<LeafNode>,
 ///     InternalNode<InternalNode<LeafNode> >,
@@ -989,18 +1001,18 @@ private:
 ///
 /// @note Use the following to get the Nth node type, where N=0 is the LeafNodeType:
 /// @code
-/// boost::mpl::at<NodeChainType, boost::mpl::int_<N> >::type
+/// NodeChainType::Get<N>;
 /// @endcode
 template<typename HeadT, int HeadLevel>
 struct NodeChain {
     using SubtreeT = typename NodeChain<typename HeadT::ChildNodeType, HeadLevel-1>::Type;
-    using Type = typename boost::mpl::push_back<SubtreeT, HeadT>::type;
+    using Type = typename SubtreeT::template Append<HeadT>;
 };
 
 /// Specialization to terminate NodeChain
 template<typename HeadT>
 struct NodeChain<HeadT, /*HeadLevel=*/1> {
-    using Type = typename boost::mpl::vector<typename HeadT::ChildNodeType, HeadT>::type;
+    using Type = TypeList<typename HeadT::ChildNodeType, HeadT>;
 };
 
 
@@ -1045,8 +1057,11 @@ template<typename ChildT>
 template<typename OtherChildType>
 inline
 RootNode<ChildT>::RootNode(const RootNode<OtherChildType>& other,
-    const ValueType& backgd, const ValueType& foregd, TopologyCopy):
-    mBackground(backgd)
+    const ValueType& backgd, const ValueType& foregd, TopologyCopy)
+    : mBackground(backgd)
+#if OPENVDB_ABI_VERSION_NUMBER >= 9
+    , mTransientData(other.mTransientData)
+#endif
 {
     using OtherRootT = RootNode<OtherChildType>;
 
@@ -1067,8 +1082,11 @@ template<typename ChildT>
 template<typename OtherChildType>
 inline
 RootNode<ChildT>::RootNode(const RootNode<OtherChildType>& other,
-    const ValueType& backgd, TopologyCopy):
-    mBackground(backgd)
+    const ValueType& backgd, TopologyCopy)
+    : mBackground(backgd)
+#if OPENVDB_ABI_VERSION_NUMBER >= 9
+    , mTransientData(other.mTransientData)
+#endif
 {
     using OtherRootT = RootNode<OtherChildType>;
 
@@ -1127,6 +1145,9 @@ struct RootNodeCopyHelper<RootT, OtherRootT, /*Compatible=*/true>
         };
 
         self.mBackground = Local::convertValue(other.mBackground);
+#if OPENVDB_ABI_VERSION_NUMBER >= 9
+        self.mTransientData = other.mTransientData;
+#endif
 
         self.clear();
         self.initTable();
@@ -1153,6 +1174,9 @@ RootNode<ChildT>::operator=(const RootNode& other)
 {
     if (&other != this) {
         mBackground = other.mBackground;
+#if OPENVDB_ABI_VERSION_NUMBER >= 9
+        mTransientData = other.mTransientData;
+#endif
 
         this->clear();
         this->initTable();
@@ -1478,15 +1502,13 @@ RootNode<ChildT>::evalActiveBoundingBox(CoordBBox& bbox, bool visitVoxels) const
 }
 
 
+#if OPENVDB_ABI_VERSION_NUMBER < 8
 template<typename ChildT>
 inline Index
 RootNode<ChildT>::getChildCount() const {
-    Index sum = 0;
-    for (MapCIter i = mTable.begin(), e = mTable.end(); i != e; ++i) {
-        if (isChild(i)) ++sum;
-    }
-    return sum;
+    return this->childCount();
 }
+#endif
 
 
 template<typename ChildT>
@@ -1546,6 +1568,18 @@ RootNode<ChildT>::nonLeafCount() const
         for (MapCIter i = mTable.begin(), e = mTable.end(); i != e; ++i) {
             if (isChild(i)) sum += getChild(i).nonLeafCount();
         }
+    }
+    return sum;
+}
+
+
+template<typename ChildT>
+inline Index32
+RootNode<ChildT>::childCount() const
+{
+    Index sum = 0;
+    for (MapCIter i = mTable.begin(), e = mTable.end(); i != e; ++i) {
+        if (isChild(i)) ++sum;
     }
     return sum;
 }
@@ -2261,7 +2295,7 @@ RootNode<ChildT>::writeTopology(std::ostream& os, bool toHalf) const
     }
     io::setGridBackgroundValuePtr(os, &mBackground);
 
-    const Index numTiles = this->getTileCount(), numChildren = this->getChildCount();
+    const Index numTiles = this->getTileCount(), numChildren = this->childCount();
     os.write(reinterpret_cast<const char*>(&numTiles), sizeof(Index));
     os.write(reinterpret_cast<const char*>(&numChildren), sizeof(Index));
 
@@ -2859,8 +2893,8 @@ RootNode<ChildT>::getNodes(ArrayT& array)
         "argument to getNodes() must be a pointer array");
     using NodeType = typename std::remove_pointer<NodePtr>::type;
     using NonConstNodeType = typename std::remove_const<NodeType>::type;
-    using result = typename boost::mpl::contains<NodeChainType, NonConstNodeType>::type;
-    static_assert(result::value, "can't extract non-const nodes from a const tree");
+    static_assert(NodeChainType::template Contains<NonConstNodeType>,
+        "can't extract non-const nodes from a const tree");
     using ArrayChildT = typename std::conditional<
         std::is_const<NodeType>::value, const ChildT, ChildT>::type;
 
@@ -2889,8 +2923,8 @@ RootNode<ChildT>::getNodes(ArrayT& array) const
     static_assert(std::is_const<NodeType>::value,
         "argument to getNodes() must be an array of const node pointers");
     using NonConstNodeType = typename std::remove_const<NodeType>::type;
-    using result = typename boost::mpl::contains<NodeChainType, NonConstNodeType>::type;
-    static_assert(result::value, "can't extract non-const nodes from a const tree");
+    static_assert(NodeChainType::template Contains<NonConstNodeType>,
+        "can't extract non-const nodes from a const tree");
 
     for (MapCIter iter=mTable.begin(); iter!=mTable.end(); ++iter) {
         if (const ChildNodeType *child = iter->second.child) {
@@ -2917,8 +2951,8 @@ RootNode<ChildT>::stealNodes(ArrayT& array, const ValueType& value, bool state)
         "argument to stealNodes() must be a pointer array");
     using NodeType = typename std::remove_pointer<NodePtr>::type;
     using NonConstNodeType = typename std::remove_const<NodeType>::type;
-    using result = typename boost::mpl::contains<NodeChainType, NonConstNodeType>::type;
-    static_assert(result::value, "can't extract non-const nodes from a const tree");
+    static_assert(NodeChainType::template Contains<NonConstNodeType>,
+        "can't extract non-const nodes from a const tree");
     using ArrayChildT = typename std::conditional<
         std::is_const<NodeType>::value, const ChildT, ChildT>::type;
 
@@ -3054,7 +3088,7 @@ RootNode<ChildT>::merge(RootNode& other)
 template<typename ChildT>
 template<typename OtherChildType>
 inline void
-RootNode<ChildT>::topologyUnion(const RootNode<OtherChildType>& other)
+RootNode<ChildT>::topologyUnion(const RootNode<OtherChildType>& other, const bool preserveTiles)
 {
     using OtherRootT = RootNode<OtherChildType>;
     using OtherCIterT = typename OtherRootT::MapCIter;
@@ -3068,12 +3102,14 @@ RootNode<ChildT>::topologyUnion(const RootNode<OtherChildType>& other)
                 mTable[i->first] = NodeStruct(
                     *(new ChildT(other.getChild(i), mBackground, TopologyCopy())));
             } else if (this->isChild(j)) { // union with child branch
-                this->getChild(j).topologyUnion(other.getChild(i));
+                this->getChild(j).topologyUnion(other.getChild(i), preserveTiles);
             } else {// this is a tile so replace it with a child branch with identical topology
-                ChildT* child = new ChildT(
-                    other.getChild(i), this->getTile(j).value, TopologyCopy());
-                if (this->isTileOn(j)) child->setValuesOn();//this is an active tile
-                this->setChild(j, *child);
+                if (!preserveTiles || this->isTileOff(j)) { // force child topology
+                    ChildT* child = new ChildT(
+                        other.getChild(i), this->getTile(j).value, TopologyCopy());
+                    if (this->isTileOn(j)) child->setValuesOn();//this is an active tile
+                    this->setChild(j, *child);
+                }
             }
         } else if (other.isTileOn(i)) { // other is an active tile
             if (j == mTable.end()) { // insert an active tile
@@ -3348,11 +3384,7 @@ RootNode<ChildT>::visitActiveBBox(BBoxOp& op) const
         if (this->isChild(i) && descent) {
             this->getChild(i).visitActiveBBox(op);
         } else {
-#ifdef _MSC_VER
-            op.operator()<LEVEL>(CoordBBox::createCube(i->first, ChildT::DIM));
-#else
             op.template operator()<LEVEL>(CoordBBox::createCube(i->first, ChildT::DIM));
-#endif
         }
     }
 }

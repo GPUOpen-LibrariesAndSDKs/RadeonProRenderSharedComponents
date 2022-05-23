@@ -124,7 +124,13 @@ public:
         assert(!tmp.empty());
         size_t midpoint = (tmp.size() - 1) >> 1;
         // Partially sort the vector until the median value is at the midpoint.
+#if !defined(_MSC_VER) || _MSC_VER < 1924
         std::nth_element(tmp.begin(), tmp.begin() + midpoint, tmp.end());
+#else
+        // Workaround MSVC bool warning C4804 unsafe use of type 'bool'
+        std::nth_element(tmp.begin(), tmp.begin() + midpoint, tmp.end(),
+                         std::less<ValueType>());
+#endif
         return tmp[midpoint];
     }
 
@@ -1369,17 +1375,19 @@ public:
 
     WenoStencil(const GridType& grid)
         : BaseType(grid, SIZE)
-        , mDx2(ValueType(math::Pow2(grid.voxelSize()[0])))
+        , _mDx2(ValueType(math::Pow2(grid.voxelSize()[0])))
         , mInv2Dx(ValueType(0.5 / grid.voxelSize()[0]))
-        , mInvDx2(ValueType(1.0 / mDx2))
+        , mInvDx2(ValueType(1.0 / _mDx2))
+        , mDx2(static_cast<float>(_mDx2))
     {
     }
 
     WenoStencil(const GridType& grid, Real dx)
         : BaseType(grid, SIZE)
-        , mDx2(ValueType(dx * dx))
+        , _mDx2(ValueType(dx * dx))
         , mInv2Dx(ValueType(0.5 / dx))
-        , mInvDx2(ValueType(1.0 / mDx2))
+        , mInvDx2(ValueType(1.0 / _mDx2))
+        , mDx2(static_cast<float>(_mDx2))
     {
     }
 
@@ -1495,7 +1503,8 @@ private:
     template<typename, typename, bool> friend class BaseStencil; // allow base class to call init()
     using BaseType::mAcc;
     using BaseType::mValues;
-    const ValueType mDx2, mInv2Dx, mInvDx2;
+    const ValueType _mDx2, mInv2Dx, mInvDx2;
+    const float mDx2;
 }; // WenoStencil class
 
 

@@ -16,6 +16,7 @@
 #include "LevelSetRebuild.h" // for doLevelSetRebuild()
 #include "SignedFloodFill.h" // for signedFloodFill
 #include "Prune.h" // for pruneLevelSet
+#include <openvdb/openvdb.h>
 #include <tbb/blocked_range.h>
 #include <tbb/parallel_reduce.h>
 #include <cmath>
@@ -50,7 +51,7 @@ namespace tools {
 /// tools::resampleToMatch<tools::QuadraticSampler>(*src, *dest, interrupter);
 /// @endcode
 template<typename Sampler, typename Interrupter, typename GridType>
-inline void
+void
 resampleToMatch(const GridType& inGrid, GridType& outGrid, Interrupter& interrupter);
 
 /// @brief Resample an input grid into an output grid of the same type such that,
@@ -75,12 +76,13 @@ resampleToMatch(const GridType& inGrid, GridType& outGrid, Interrupter& interrup
 /// tools::resampleToMatch<tools::QuadraticSampler>(*src, *dest);
 /// @endcode
 template<typename Sampler, typename GridType>
-inline void
+void
 resampleToMatch(const GridType& inGrid, GridType& outGrid);
 
 
 ////////////////////////////////////////
 
+/// @cond OPENVDB_DOCS_INTERNAL
 
 namespace internal {
 
@@ -133,6 +135,8 @@ public:
 };
 
 } // namespace internal
+
+/// @endcond
 
 
 ////////////////////////////////////////
@@ -267,14 +271,19 @@ private:
 
 namespace local_util {
 
-/// @brief Decompose an affine transform into scale, rotation and translation components.
-/// @return @c false if the given matrix is not affine or cannot otherwise be decomposed.
+enum { DECOMP_INVALID = 0, DECOMP_VALID = 1, DECOMP_UNIQUE = 2 };
+
+/// @brief Decompose an affine transform into scale, rotation (XYZ order),
+/// and translation components.
+/// @return DECOMP_INVALID if the given matrix is not affine or cannot
+/// be decomposed, DECOMP_UNIQUE if the matrix has a unique decomposition,
+/// DECOMP_VALID otherwise
 template<typename T>
-inline bool
+int
 decompose(const math::Mat4<T>& m, math::Vec3<T>& scale,
     math::Vec3<T>& rotate, math::Vec3<T>& translate)
 {
-    if (!math::isAffine(m)) return false;
+    if (!math::isAffine(m)) return DECOMP_INVALID;
 
     // This is the translation in world space
     translate = m.getTranslation();
@@ -293,11 +302,9 @@ decompose(const math::Mat4<T>& m, math::Vec3<T>& scale,
 
     T minAngle = std::numeric_limits<T>::max();
 
-    // If the transformation matrix contains a reflection,
-    // test different negative scales to find a decomposition
-    // that favors the optimal resampling algorithm.
+    // If the transformation matrix contains a reflection, test different negative scales
+    // to find a decomposition that favors the optimal resampling algorithm.
     for (size_t n = 0; n < 8; ++n) {
-
         const math::Vec3<T> signedScale(
             n & 0x1 ? -unsignedScale.x() : unsignedScale.x(),
             n & 0x2 ? -unsignedScale.y() : unsignedScale.y(),
@@ -310,9 +317,9 @@ decompose(const math::Mat4<T>& m, math::Vec3<T>& scale,
         const math::Vec3<T> tmpAngle = math::eulerAngles(mat, math::XYZ_ROTATION);
 
         const math::Mat3<T> rebuild =
-            math::rotation<math::Mat3<T> >(math::Vec3<T>(1, 0, 0), tmpAngle.x()) *
-            math::rotation<math::Mat3<T> >(math::Vec3<T>(0, 1, 0), tmpAngle.y()) *
             math::rotation<math::Mat3<T> >(math::Vec3<T>(0, 0, 1), tmpAngle.z()) *
+            math::rotation<math::Mat3<T> >(math::Vec3<T>(0, 1, 0), tmpAngle.y()) *
+            math::rotation<math::Mat3<T> >(math::Vec3<T>(1, 0, 0), tmpAngle.x()) *
             math::scale<math::Mat3<T> >(signedScale);
 
         if (xform.eq(rebuild)) {
@@ -337,13 +344,15 @@ decompose(const math::Mat4<T>& m, math::Vec3<T>& scale,
         }
     }
 
-    if (!validDecomposition || (hasRotation && !hasUniformScale)) {
+    if (!validDecomposition) {
         // The decomposition is invalid if the transformation matrix contains shear.
-        // No unique decomposition if scale is nonuniform and rotation is nonzero.
-        return false;
+        return DECOMP_INVALID;
     }
-
-    return true;
+    if (hasRotation && !hasUniformScale) {
+        // No unique decomposition if scale is nonuniform and rotation is nonzero.
+        return DECOMP_VALID;
+    }
+    return DECOMP_UNIQUE;
 }
 
 } // namespace local_util
@@ -420,7 +429,7 @@ private:
 ///
 /// @warning Do not use this function to scale or shear a level set grid.
 template<typename Sampler, typename Interrupter, typename GridType>
-inline void
+void
 doResampleToMatch(const GridType& inGrid, GridType& outGrid, Interrupter& interrupter)
 {
     ABTransform xform(inGrid.transform(), outGrid.transform());
@@ -452,8 +461,28 @@ doResampleToMatch(const GridType& inGrid, GridType& outGrid, Interrupter& interr
 }
 
 
+template<typename ValueType>
+struct HalfWidthOp {
+    static ValueType eval(const ValueType& background, const Vec3d& voxelSize)
+    {
+        OPENVDB_NO_TYPE_CONVERSION_WARNING_BEGIN
+        ValueType result(background * (1.0 / voxelSize[0]));
+        OPENVDB_NO_TYPE_CONVERSION_WARNING_END
+        return result;
+    }
+}; // struct HalfWidthOp
+
+template<>
+struct HalfWidthOp<bool> {
+    static bool eval(const bool& background, const Vec3d& /*voxelSize*/)
+    {
+        return background;
+    }
+}; // struct HalfWidthOp<bool>
+
+
 template<typename Sampler, typename Interrupter, typename GridType>
-inline void
+void
 resampleToMatch(const GridType& inGrid, GridType& outGrid, Interrupter& interrupter)
 {
     if (inGrid.getGridClass() == GRID_LEVEL_SET) {
@@ -471,11 +500,9 @@ resampleToMatch(const GridType& inGrid, GridType& outGrid, Interrupter& interrup
         using ValueT = typename GridType::ValueType;
         const bool outIsLevelSet = outGrid.getGridClass() == openvdb::GRID_LEVEL_SET;
 
-        OPENVDB_NO_TYPE_CONVERSION_WARNING_BEGIN
         const ValueT halfWidth = outIsLevelSet
-            ? ValueT(outGrid.background() * (1.0 / outGrid.voxelSize()[0]))
-            : ValueT(inGrid.background() * (1.0 / inGrid.voxelSize()[0]));
-        OPENVDB_NO_TYPE_CONVERSION_WARNING_END
+            ? HalfWidthOp<ValueT>::eval(outGrid.background(), outGrid.voxelSize())
+            : HalfWidthOp<ValueT>::eval(inGrid.background(),  inGrid.voxelSize());
 
         typename GridType::Ptr tempGrid;
         try {
@@ -500,7 +527,7 @@ resampleToMatch(const GridType& inGrid, GridType& outGrid, Interrupter& interrup
 
 
 template<typename Sampler, typename GridType>
-inline void
+void
 resampleToMatch(const GridType& inGrid, GridType& outGrid)
 {
     util::NullInterrupter interrupter;
@@ -523,7 +550,7 @@ GridTransformer::GridTransformer(const Mat4R& xform):
     if (local_util::decompose(mTransform, scale, rotate, translate)) {
         // If the transform can be decomposed into affine components,
         // use them to set up a mipmapping-like scheme for downsampling.
-        init(mPivot, scale, rotate, translate, "srt", "zyx");
+        init(mPivot, scale, rotate, translate, "rst", "zyx");
     }
 }
 
@@ -1008,6 +1035,41 @@ GridResampler::transformBBox(
         }
     }
 } // GridResampler::transformBBox()
+
+
+////////////////////////////////////////
+
+
+// Explicit Template Instantiation
+
+#ifdef OPENVDB_USE_EXPLICIT_INSTANTIATION
+
+#ifdef OPENVDB_INSTANTIATE_GRIDTRANSFORMER
+#include <openvdb/util/ExplicitInstantiation.h>
+#endif
+
+#define _FUNCTION(TreeT) \
+    void resampleToMatch<PointSampler>(const Grid<TreeT>&, Grid<TreeT>&, util::NullInterrupter&)
+OPENVDB_VOLUME_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#define _FUNCTION(TreeT) \
+    void resampleToMatch<BoxSampler>(const Grid<TreeT>&, Grid<TreeT>&, util::NullInterrupter&)
+OPENVDB_VOLUME_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#define _FUNCTION(TreeT) \
+    void resampleToMatch<QuadraticSampler>(const Grid<TreeT>&, Grid<TreeT>&, util::NullInterrupter&)
+OPENVDB_NUMERIC_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#define _FUNCTION(TreeT) \
+    void resampleToMatch<QuadraticSampler>(const Grid<TreeT>&, Grid<TreeT>&, util::NullInterrupter&)
+OPENVDB_VEC3_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#endif // OPENVDB_USE_EXPLICIT_INSTANTIATION
+
 
 } // namespace tools
 } // namespace OPENVDB_VERSION_NAME
