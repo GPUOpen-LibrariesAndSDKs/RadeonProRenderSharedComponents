@@ -55,6 +55,7 @@ enum RifFilterInput
 	RifBackground,
 	RifShadowCatcher,
 	RifReflectionCatcher,
+	RifMattePass,
 	RifMaxInput
 };
 
