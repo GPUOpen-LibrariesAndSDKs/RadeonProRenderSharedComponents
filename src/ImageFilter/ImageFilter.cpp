@@ -1653,8 +1653,6 @@ void RifFilterShadowCatcher::AttachFilter(const RifContextWrapper* rifContext)
 	RifSCWrapper shadowColor(rifContext->Context(), mParams["shadowColor[0]"], mParams["shadowColor[1]"], mParams["shadowColor[2]"], 1.0f);
 	RifSCWrapper shadowTransp(rifContext->Context(), mParams["shadowWeight"] - mParams["shadowTransp"]);
 	RifSCWrapper const1(rifContext->Context(), 1.0f);
-	RifSCWrapper backgroundTransp(rifContext->Context(), mParams["bgWeight"] - mParams["bgTransparency"]);
-	RifSCWrapper backgroundColor(rifContext->Context(), mParams["bgColor[0]"], mParams["bgColor[1]"], mParams["bgColor[2]"], 1.0f);
 
 	// mattePass * (1 - sc) + (color - mattePass)
 	RifSCWrapper step1 = shadowCatcher * shadowTransp * (const1 - shadowColor);
@@ -1691,12 +1689,10 @@ void RifFilterReflectionCatcher::AttachFilter(const RifContextWrapper* rifContex
 	RifSCWrapper reflectionCatcher(rifContext->Context(), mInputs.at(RifReflectionCatcher)->mRifImage);
 	RifSCWrapper const1(rifContext->Context(), 1.0f);
 	RifSCWrapper background(rifContext->Context(), mInputs.at(RifBackground)->mRifImage);
-	RifSCWrapper backgroundTransp(rifContext->Context(), mParams["bgWeight"] - mParams["bgTransparency"]);
-	RifSCWrapper backgroundColor(rifContext->Context(), mParams["bgColor[0]"], mParams["bgColor[1]"], mParams["bgColor[2]"], 1.0f);
 
 	// background * (1 - (opacity + rc)) + color
 	RifSCWrapper step1 = const1 - (opacity + reflectionCatcher);
-	RifSCWrapper step2 = background * backgroundTransp * backgroundColor * step1;
+	RifSCWrapper step2 = background * step1;
 	m_res = step2 + color;
 
 	mRifImageFilterHandle = m_res.GetInternalFilter();
@@ -1733,12 +1729,10 @@ void RifFilterShadowReflectionCatcher::AttachFilter(const RifContextWrapper* rif
 	RifSCWrapper shadowTransp(rifContext->Context(), mParams["shadowWeight"] - mParams["shadowTransp"]);
 	RifSCWrapper background(rifContext->Context(), mInputs.at(RifBackground)->mRifImage);
 	RifSCWrapper mattePass(rifContext->Context(), mInputs.at(RifBackground)->mRifImage);
-	RifSCWrapper backgroundTransp(rifContext->Context(), mParams["bgWeight"] - mParams["bgTransparency"]);
-	RifSCWrapper backgroundColor(rifContext->Context(), mParams["bgColor[0]"], mParams["bgColor[1]"], mParams["bgColor[2]"], 1.0f);
 
 	// ((background * (1 - (opacity + rc)) + mattePass) * (1 - sc)) + (color - mattePass)
 	RifSCWrapper step1 = const1 - (opacity + reflectionCatcher);
-	RifSCWrapper step2 = background * backgroundTransp * backgroundColor * step1;
+	RifSCWrapper step2 = background * step1;
 	RifSCWrapper step3 = shadowCatcher * shadowTransp * (const1 - shadowColor);
 	RifSCWrapper step4 = (step2 + mattePass) * (const1 - step3);
 	m_res = step4 + (color - mattePass);
