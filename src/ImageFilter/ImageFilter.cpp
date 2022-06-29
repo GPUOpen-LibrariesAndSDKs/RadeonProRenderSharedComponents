@@ -1684,6 +1684,7 @@ void RifFilterReflectionCatcher::AttachFilter(const RifContextWrapper* rifContex
 	rif_int rifStatus = RIF_SUCCESS;
 
 	// setup shadow catcher inputs
+	RifSCWrapper noAlpha(rifContext->Context(), 1.0f, 1.0f, 1.0f, 0.0f);
 	RifSCWrapper color(rifContext->Context(), mInputs.at(RifColor)->mRifImage);
 	RifSCWrapper opacity(rifContext->Context(), mInputs.at(RifOpacity)->mRifImage);
 	RifSCWrapper reflectionCatcher(rifContext->Context(), mInputs.at(RifReflectionCatcher)->mRifImage);
@@ -1691,7 +1692,7 @@ void RifFilterReflectionCatcher::AttachFilter(const RifContextWrapper* rifContex
 	RifSCWrapper background(rifContext->Context(), mInputs.at(RifBackground)->mRifImage);
 
 	// background * (1 - (opacity + rc)) + color
-	RifSCWrapper step1 = const1 - (opacity + reflectionCatcher);
+	RifSCWrapper step1 = const1 - (opacity + reflectionCatcher) * noAlpha;
 	RifSCWrapper step2 = background * step1;
 	m_res = step2 + color;
 
@@ -1720,6 +1721,7 @@ void RifFilterShadowReflectionCatcher::AttachFilter(const RifContextWrapper* rif
 	rif_int rifStatus = RIF_SUCCESS;
 
 	// setup shadow catcher inputs
+	RifSCWrapper noAlpha(rifContext->Context(), 1.0f, 1.0f, 1.0f, 0.0f);
 	RifSCWrapper color(rifContext->Context(), mInputs.at(RifColor)->mRifImage);
 	RifSCWrapper opacity(rifContext->Context(), mInputs.at(RifOpacity)->mRifImage);
 	RifSCWrapper shadowCatcher(rifContext->Context(), mInputs.at(RifShadowCatcher)->mRifImage);
@@ -1731,7 +1733,7 @@ void RifFilterShadowReflectionCatcher::AttachFilter(const RifContextWrapper* rif
 	RifSCWrapper mattePass(rifContext->Context(), mInputs.at(RifBackground)->mRifImage);
 
 	// ((background * (1 - (opacity + rc)) + mattePass) * (1 - sc)) + (color - mattePass)
-	RifSCWrapper step1 = const1 - (opacity + reflectionCatcher);
+	RifSCWrapper step1 = const1 - (opacity + reflectionCatcher) * noAlpha;
 	RifSCWrapper step2 = background * step1;
 	RifSCWrapper step3 = shadowCatcher * shadowTransp * (const1 - shadowColor);
 	RifSCWrapper step4 = (step2 + mattePass) * (const1 - step3);
