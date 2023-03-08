@@ -56,6 +56,8 @@ static rpr_int GpuDeviceIdUsed(rpr_creation_flags contextFlags)
 	return -1;
 }
 
+std::vector<rpr_char> GetRprCachePath(rpr_context rprContext);
+
 ImageFilter::ImageFilter(const rpr_context rprContext, std::uint32_t width, std::uint32_t height, const std::string& modelsPath, bool forceCPUContext /*= false*/) :
 	mWidth(width),
 	mHeight(height),
@@ -70,6 +72,9 @@ ImageFilter::ImageFilter(const rpr_context rprContext, std::uint32_t width, std:
 	if (RPR_SUCCESS != rprStatus)
 		throw std::runtime_error("RPR denoiser failed to get context parameters.");
 
+	std::vector<rpr_char> path = GetRprCachePath(rprContext);
+	bool haveNoCache = path.empty() || (path[0] == (rpr_char)'\0');
+
 	if (forceCPUContext)
 	{
 		mRifContext.reset(new RifContextCPU(rprContext));
@@ -78,7 +83,7 @@ ImageFilter::ImageFilter(const rpr_context rprContext, std::uint32_t width, std:
 	{
 		mRifContext.reset( new RifContextGPUMetal(rprContext) );
 	}
-	else if (HasGpuContext(contextFlags))
+	else if (HasGpuContext(contextFlags) && !haveNoCache)
 	{
 		mRifContext.reset(new RifContextGPU(rprContext));
 	}
@@ -304,7 +309,7 @@ void RifContextWrapper::CreateOutput(const rif_image_desc& desc)
 		throw std::runtime_error("RPR denoiser failed to create output image.");
 }
 
-std::vector<rpr_char> RifContextWrapper::GetRprCachePath(rpr_context rprContext) const
+std::vector<rpr_char> GetRprCachePath(rpr_context rprContext)
 {
 	size_t length;
 	rpr_status rprStatus = rprContextGetInfo(rprContext, RPR_CONTEXT_CACHE_PATH, sizeof(size_t), nullptr, &length);

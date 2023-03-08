@@ -142,8 +142,6 @@ public:
 	virtual rif_image CreateRifImage(const rpr_framebuffer rprFrameBuffer, const rif_image_desc& desc) const = 0;
 	void UpdateInputs(const RifFilterWrapper* rifFilter) const;
 
-protected:
-	virtual std::vector<rpr_char> GetRprCachePath(rpr_context rprContext) const final;
 };
 
 class RifContextGPU final : public RifContextWrapper
