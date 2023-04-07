@@ -3,7 +3,7 @@ Copyright 2020 Advanced Micro Devices, Inc
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
-    http://www.apache.org/licenses/LICENSE-2.0
+	http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -47,12 +47,12 @@ static rpr_int GpuDeviceIdUsed(rpr_creation_flags contextFlags)
 
 #undef GPU
 
-	for (rpr_int i = 0; i < gpu_ids.size(); i++ )
-	{	
+	for (rpr_int i = 0; i < gpu_ids.size(); i++)
+	{
 		if ((contextFlags & gpu_ids[i]) != 0)
 			return i;
 	}
-	
+
 	return -1;
 }
 
@@ -66,7 +66,7 @@ ImageFilter::ImageFilter(const rpr_context rprContext, std::uint32_t width, std:
 	rpr_creation_flags contextFlags = 0;
 	rpr_int rprStatus = rprContextGetInfo(rprContext, RPR_CONTEXT_CREATION_FLAGS, sizeof(rpr_creation_flags), &contextFlags, nullptr);
 	assert(RPR_SUCCESS == rprStatus);
-	
+
 	if (RPR_SUCCESS != rprStatus)
 		throw std::runtime_error("RPR denoiser failed to get context parameters.");
 
@@ -76,7 +76,7 @@ ImageFilter::ImageFilter(const rpr_context rprContext, std::uint32_t width, std:
 	}
 	else if (contextFlags & RPR_CREATION_FLAGS_ENABLE_METAL)
 	{
-		mRifContext.reset( new RifContextGPUMetal(rprContext) );
+		mRifContext.reset(new RifContextGPUMetal(rprContext));
 	}
 	else if (HasGpuContext(contextFlags))
 	{
@@ -96,7 +96,7 @@ ImageFilter::~ImageFilter()
 {
 	if (mRifFilter != nullptr)
 	{
-		mRifFilter->DetachFilter( mRifContext.get() );
+		mRifFilter->DetachFilter(mRifContext.get());
 	}
 }
 
@@ -105,19 +105,19 @@ void ImageFilter::CreateFilter(RifFilterType rifFilteType, bool useOpenImageDeno
 	switch (rifFilteType)
 	{
 	case RifFilterType::BilateralDenoise:
-		mRifFilter.reset( new RifFilterBilateral( mRifContext.get() ) );
+		mRifFilter.reset(new RifFilterBilateral(mRifContext.get()));
 		break;
 
 	case RifFilterType::LwrDenoise:
-		mRifFilter.reset( new RifFilterLwr( mRifContext.get(), mWidth, mHeight) );
+		mRifFilter.reset(new RifFilterLwr(mRifContext.get(), mWidth, mHeight));
 		break;
 
 	case RifFilterType::EawDenoise:
-		mRifFilter.reset( new RifFilterEaw( mRifContext.get(), mWidth, mHeight) );
+		mRifFilter.reset(new RifFilterEaw(mRifContext.get(), mWidth, mHeight));
 		break;
 
 	case RifFilterType::MlDenoise:
-		mRifFilter.reset( new RifFilterMl(mRifContext.get(), mWidth, mHeight, mModelsPath, useOpenImageDenoise) );
+		mRifFilter.reset(new RifFilterMl(mRifContext.get(), mWidth, mHeight, mModelsPath, useOpenImageDenoise));
 		break;
 
 	case RifFilterType::MlDenoiseColorOnly:
@@ -169,7 +169,7 @@ void ImageFilter::DeleteFilter()
 {
 	if (mRifFilter != nullptr)
 	{
-		mRifFilter->DetachFilter( mRifContext.get() );
+		mRifFilter->DetachFilter(mRifContext.get());
 	}
 }
 
@@ -191,8 +191,8 @@ void ImageFilter::AddInput(RifFilterInput inputId, const rpr_framebuffer rprFram
 
 void ImageFilter::AddInput(RifFilterInput inputId, float* memPtr, size_t size, float sigma) const
 {
-	rif_image_desc desc = { mInputOverrideWidth > 0 ? mInputOverrideWidth : mWidth, 
-							mInputOverrideHeight > 0 ? mInputOverrideHeight : mHeight, 
+	rif_image_desc desc = { mInputOverrideWidth > 0 ? mInputOverrideWidth : mWidth,
+							mInputOverrideHeight > 0 ? mInputOverrideHeight : mHeight,
 							0, 0, 0, 4, RIF_COMPONENT_TYPE_FLOAT32 };
 
 	rif_image rifImage = nullptr;
@@ -213,7 +213,7 @@ void ImageFilter::AddParam(std::string name, RifParam param) const
 
 void ImageFilter::AttachFilter() const
 {
-	mRifFilter->AttachFilter( mRifContext.get() );
+	mRifFilter->AttachFilter(mRifContext.get());
 	mRifFilter->ApplyParameters();
 }
 
@@ -221,7 +221,7 @@ void ImageFilter::Run() const
 {
 	rif_int rifStatus = RIF_SUCCESS;
 
-	mRifContext->UpdateInputs( mRifFilter.get() );
+	mRifContext->UpdateInputs(mRifFilter.get());
 
 	rifStatus = rifContextExecuteCommandQueue(mRifContext->Context(), mRifContext->Queue(), nullptr, nullptr, nullptr);
 	assert(RIF_SUCCESS == rifStatus);
@@ -234,13 +234,13 @@ std::vector<float> ImageFilter::GetData() const
 {
 	float* output = nullptr;
 
-	rif_int rifStatus = rifImageMap(mRifContext->Output(), RIF_IMAGE_MAP_READ, (void**) &output);
+	rif_int rifStatus = rifImageMap(mRifContext->Output(), RIF_IMAGE_MAP_READ, (void**)&output);
 	assert(RIF_SUCCESS == rifStatus && output != nullptr);
 
 	if (RIF_SUCCESS != rifStatus || nullptr == output)
 		throw std::runtime_error("RPR denoiser failed to map output data.");
 
-	std::vector<float> floatData(output, output + mWidth * mHeight * 4 );
+	std::vector<float> floatData(output, output + mWidth * mHeight * 4);
 
 	rifStatus = rifImageUnmap(mRifContext->Output(), output);
 	assert(RIF_SUCCESS == rifStatus);
@@ -260,7 +260,7 @@ void ImageFilter::SetInputOverrideSize(std::uint32_t width, std::uint32_t height
 RifContextWrapper::~RifContextWrapper()
 {
 	rif_int rifStatus = RIF_SUCCESS;
-	
+
 	if (mOutputRifImage != nullptr)
 	{
 		rifStatus = rifObjectDelete(mOutputRifImage);
@@ -380,7 +380,7 @@ RifContextGPU::RifContextGPU(const rpr_context rprContext)
 	if (RIF_SUCCESS != rifStatus)
 		throw std::runtime_error("RPR denoiser failed to create RIF command queue.");
 #else
-    throw std::runtime_error("RifContextGPU is not implemented on OSX");
+	throw std::runtime_error("RifContextGPU is not implemented on OSX");
 #endif
 }
 
@@ -400,7 +400,7 @@ rif_image RifContextGPU::CreateRifImage(const rpr_framebuffer rprFrameBuffer, co
 	if (RPR_SUCCESS != rprStatus)
 		throw std::runtime_error("RPR denoiser failed to get frame buffer info.");
 
-	rif_int rifStatus = rifContextCreateImageFromOpenClMemory(mRifContextHandle , &desc, clMem, &rifImage);
+	rif_int rifStatus = rifContextCreateImageFromOpenClMemory(mRifContextHandle, &desc, clMem, &rifImage);
 	assert(RIF_SUCCESS == rifStatus);
 
 	if (RIF_SUCCESS != rifStatus)
@@ -408,8 +408,8 @@ rif_image RifContextGPU::CreateRifImage(const rpr_framebuffer rprFrameBuffer, co
 
 	return rifImage;
 #else
-    throw std::runtime_error("RifContextGPU is not implemented on OSX");
-    return nullptr;
+	throw std::runtime_error("RifContextGPU is not implemented on OSX");
+	return nullptr;
 #endif
 }
 
@@ -470,33 +470,33 @@ RifContextGPUMetal::RifContextGPUMetal(const rpr_context rprContext)
 
 	if (RIF_SUCCESS != rifStatus || 0 == deviceCount)
 		throw std::runtime_error("RPR denoiser hasn't found compatible devices.");
-	
+
 	rpr_creation_flags contextFlags = 0;
 	rpr_int rprStatus = rprContextGetInfo(rprContext, RPR_CONTEXT_CREATION_FLAGS, sizeof(rpr_creation_flags), &contextFlags, nullptr);
 	assert(RPR_SUCCESS == rprStatus);
-    
-    
-    rpr_metal_device pMetalDevice = nullptr;
-    rpr_metal_command_queue pMetalCommandQueue = nullptr;
-    
-    rprStatus = rprContextGetInfo(rprContext, RPR_METAL_DEVICE, sizeof(rpr_metal_device), &pMetalDevice, nullptr);
-    assert(RIF_SUCCESS == rifStatus);
-    assert(pMetalDevice != nullptr);
 
-    rprStatus = rprContextGetInfo(rprContext, RPR_METAL_COMMAND_QUEUE, sizeof(rpr_metal_command_queue), &pMetalCommandQueue, nullptr);
-    assert(RIF_SUCCESS == rifStatus);
-    assert(pMetalCommandQueue != nullptr);
-    
-    
+
+	rpr_metal_device pMetalDevice = nullptr;
+	rpr_metal_command_queue pMetalCommandQueue = nullptr;
+
+	rprStatus = rprContextGetInfo(rprContext, RPR_METAL_DEVICE, sizeof(rpr_metal_device), &pMetalDevice, nullptr);
+	assert(RIF_SUCCESS == rifStatus);
+	assert(pMetalDevice != nullptr);
+
+	rprStatus = rprContextGetInfo(rprContext, RPR_METAL_COMMAND_QUEUE, sizeof(rpr_metal_command_queue), &pMetalCommandQueue, nullptr);
+	assert(RIF_SUCCESS == rifStatus);
+	assert(pMetalCommandQueue != nullptr);
+
+
 	std::vector<rpr_char> path = GetRprCachePath(rprContext);
 
 	rifStatus = rifCreateContextFromMetalContext(RIF_API_VERSION, pMetalDevice, pMetalCommandQueue, path.data(), &mRifContextHandle);
-    
+
 	assert(RIF_SUCCESS == rifStatus);
 
 	if (RIF_SUCCESS != rifStatus)
 		throw std::runtime_error("RPR denoiser failed to create RIF context.");
-    
+
 	rifStatus = rifContextCreateCommandQueue(mRifContextHandle, &mRifCommandQueueHandle);
 	assert(RIF_SUCCESS == rifStatus);
 
@@ -544,7 +544,7 @@ rif_image RifContextGPUMetal::CreateRifImage(const rpr_framebuffer rprFrameBuffe
 	if (RPR_SUCCESS != rprStatus)
 		throw std::runtime_error("RPR denoiser failed to get frame buffer info.");
 
-	
+
 	size_t fbSize;
 	rprStatus = rprFrameBufferGetInfo(rprFrameBuffer, RPR_FRAMEBUFFER_DATA, 0, NULL, &fbSize);
 	assert(RPR_SUCCESS == rprStatus);
@@ -552,7 +552,7 @@ rif_image RifContextGPUMetal::CreateRifImage(const rpr_framebuffer rprFrameBuffe
 	if (RPR_SUCCESS != rprStatus)
 		throw std::runtime_error("RPR denoiser failed to acquire frame buffer info.");
 
-	rif_int rifStatus = rifContextCreateImageFromMetalMemory(mRifContextHandle , &desc, clMem, fbSize, &rifImage);
+	rif_int rifStatus = rifContextCreateImageFromMetalMemory(mRifContextHandle, &desc, clMem, fbSize, &rifImage);
 	assert(RIF_SUCCESS == rifStatus);
 
 	if (RIF_SUCCESS != rifStatus)
@@ -605,7 +605,7 @@ void RifInputGPUCPU::Update()
 	void* imageData = nullptr;
 
 	// verify image size
-	rif_int rifStatus = rifImageGetInfo(mRifImage, RIF_IMAGE_DATA_SIZEBYTE, sizeof(size_t), (void*) &sizeInBytes, &retSize);
+	rif_int rifStatus = rifImageGetInfo(mRifImage, RIF_IMAGE_DATA_SIZEBYTE, sizeof(size_t), (void*)&sizeInBytes, &retSize);
 	assert(RIF_SUCCESS == rifStatus);
 
 	if (RIF_SUCCESS != rifStatus)
@@ -663,7 +663,7 @@ void RifInputCPU::Update()
 	void* imageData = nullptr;
 
 	// verify image size
-	rif_int rifStatus = rifImageGetInfo(mRifImage, RIF_IMAGE_DATA_SIZEBYTE, sizeof(size_t), (void*) &sizeInBytes, &retSize);
+	rif_int rifStatus = rifImageGetInfo(mRifImage, RIF_IMAGE_DATA_SIZEBYTE, sizeof(size_t), (void*)&sizeInBytes, &retSize);
 	assert(RIF_SUCCESS == rifStatus);
 
 	if (RIF_SUCCESS != rifStatus)
@@ -829,29 +829,29 @@ void RifFilterBilateral::AttachFilter(const RifContextWrapper* rifContext)
 		sigmas.push_back(input.second->mSigma);
 	}
 
-	rif_int rifStatus = rifImageFilterSetParameterImageArray( mRifImageFilterHandle, "inputs", &inputImages[0],
-		static_cast<rif_int>( inputImages.size() ) );
+	rif_int rifStatus = rifImageFilterSetParameterImageArray(mRifImageFilterHandle, "inputs", &inputImages[0],
+		static_cast<rif_int>(inputImages.size()));
 	assert(RIF_SUCCESS == rifStatus);
 
 	if (RIF_SUCCESS == rifStatus)
 	{
-		rifStatus = rifImageFilterSetParameterFloatArray( mRifImageFilterHandle, "sigmas", &sigmas[0],
-			static_cast<rif_int>( sigmas.size() ) );
+		rifStatus = rifImageFilterSetParameterFloatArray(mRifImageFilterHandle, "sigmas", &sigmas[0],
+			static_cast<rif_int>(sigmas.size()));
 		assert(RIF_SUCCESS == rifStatus);
 	}
 
 	if (RIF_SUCCESS == rifStatus)
 	{
-		rifStatus = rifImageFilterSetParameter1u( mRifImageFilterHandle, "inputsNum",
-			static_cast<rif_int>( inputImages.size() ) );
+		rifStatus = rifImageFilterSetParameter1u(mRifImageFilterHandle, "inputsNum",
+			static_cast<rif_int>(inputImages.size()));
 		assert(RIF_SUCCESS == rifStatus);
 	}
 
 	if (RIF_SUCCESS != rifStatus)
 		throw std::runtime_error("RPR denoiser failed to apply parameters.");
 
-	rifStatus = rifCommandQueueAttachImageFilter( rifContext->Queue(), mRifImageFilterHandle, 
-		mInputs.at(RifColor)->mRifImage, rifContext->Output() );
+	rifStatus = rifCommandQueueAttachImageFilter(rifContext->Queue(), mRifImageFilterHandle,
+		mInputs.at(RifColor)->mRifImage, rifContext->Output());
 	assert(RIF_SUCCESS == rifStatus);
 
 	if (RIF_SUCCESS != rifStatus)
@@ -946,7 +946,7 @@ void RifFilterLwr::AttachFilter(const RifContextWrapper* rifContext)
 		rifStatus = rifImageFilterSetParameterImage(mRifImageFilterHandle, "transImg", mInputs.at(RifTrans)->mRifImage);
 		assert(RIF_SUCCESS == rifStatus);
 	}
-	
+
 	if (RIF_SUCCESS == rifStatus)
 	{
 		rifStatus = rifImageFilterSetParameterImage(mRifImageFilterHandle, "vTransImg", mAuxImages[TransVarianceImage]);
@@ -1147,7 +1147,7 @@ RifFilterMl::RifFilterMl(const RifContextWrapper* rifContext, std::uint32_t widt
 
 	if (RIF_SUCCESS != rifStatus)
 		throw std::runtime_error("RPR denoiser failed to create ML filter.");
-	
+
 	rifStatus = rifImageFilterSetParameterString(mRifImageFilterHandle, "modelPath", modelsPath.c_str());
 	assert(RIF_SUCCESS == rifStatus);
 
@@ -1240,7 +1240,7 @@ void RifFilterMl::AttachFilter(const RifContextWrapper* rifContext)
 	}
 
 	rifStatus = rifImageFilterSetParameter1u(mRifImageFilterHandle, "useHDR", 1);
-	assert(RIF_SUCCESS == rifStatus);	
+	assert(RIF_SUCCESS == rifStatus);
 
 	if (RIF_SUCCESS != rifStatus)
 		throw std::runtime_error("RPR denoiser failed to setup ML filter.");
@@ -1375,7 +1375,7 @@ void RifFilterMlColorOnly::AttachFilter(const RifContextWrapper* rifContext)
 
 	rifStatus = rifImageFilterSetParameter1u(mRifImageFilterHandle, "useHDR", 1);
 	assert(RIF_SUCCESS == rifStatus);
-	
+
 	if (RIF_SUCCESS != rifStatus)
 		throw std::runtime_error("RPR denoiser failed to setup ML filter.");
 
@@ -1403,7 +1403,7 @@ RifSCInternal::RifSCInternal(rif_context context, rif_image_filter_type type)
 	: m_pFilter(nullptr)
 	, m_connections()
 {
-	rif_int res = rifContextCreateImageFilter(context, type, &m_pFilter); 
+	rif_int res = rifContextCreateImageFilter(context, type, &m_pFilter);
 	assert(RIF_SUCCESS == res);
 
 	if (RIF_SUCCESS != res)
@@ -1424,7 +1424,7 @@ RifSCInternal::operator rif_image_filter() const
 	return m_pFilter;
 }
 
-void RifSCInternal::SetInput4f(const char *inputName, float r, float g, float b, float a)
+void RifSCInternal::SetInput4f(const char* inputName, float r, float g, float b, float a)
 {
 	assert(nullptr != m_pFilter);
 	assert(nullptr != inputName);
@@ -1436,7 +1436,7 @@ void RifSCInternal::SetInput4f(const char *inputName, float r, float g, float b,
 	assert(RIF_SUCCESS == res);
 }
 
-void RifSCInternal::SetInputImage(const char *inputName, rif_image input)
+void RifSCInternal::SetInputImage(const char* inputName, rif_image input)
 {
 	assert(nullptr != m_pFilter);
 	assert(nullptr != inputName);
@@ -1689,11 +1689,25 @@ void RifFilterReflectionCatcher::AttachFilter(const RifContextWrapper* rifContex
 	RifSCWrapper opacity(rifContext->Context(), mInputs.at(RifOpacity)->mRifImage);
 	RifSCWrapper reflectionCatcher(rifContext->Context(), mInputs.at(RifReflectionCatcher)->mRifImage);
 	RifSCWrapper const1(rifContext->Context(), 1.0f);
+	RifSCWrapper black(rifContext->Context(), 0.0f, 0.0f, 0.0f, 0.0f);
 	RifSCWrapper background(rifContext->Context(), mInputs.at(RifBackground)->mRifImage);
 
 	// background * (1 - (opacity + rc)) + color
 	RifSCWrapper step1 = const1 - (opacity + reflectionCatcher) * noAlpha;
-	RifSCWrapper step2 = background * step1;
+	RifSCWrapper step2;
+
+	bool display = false;
+	auto it = mParams.find("iblDisplay");
+	if (it != mParams.end())
+		display = it->second;
+
+	if (display)
+	{
+		step2 = background * step1;
+	}
+	else {
+		step2 = black * step1;
+	}
 	m_res = step2 + color;
 
 	mRifImageFilterHandle = m_res.GetInternalFilter();
@@ -1729,12 +1743,26 @@ void RifFilterShadowReflectionCatcher::AttachFilter(const RifContextWrapper* rif
 	RifSCWrapper reflectionCatcher(rifContext->Context(), mInputs.at(RifReflectionCatcher)->mRifImage);
 	RifSCWrapper const1(rifContext->Context(), 1.0f);
 	RifSCWrapper shadowTransp(rifContext->Context(), mParams["shadowWeight"] - mParams["shadowTransp"]);
+	RifSCWrapper black(rifContext->Context(), 0.0f, 0.0f, 0.0f, 0.0f);
 	RifSCWrapper background(rifContext->Context(), mInputs.at(RifBackground)->mRifImage);
 	RifSCWrapper mattePass(rifContext->Context(), mInputs.at(RifBackground)->mRifImage);
 
 	// ((background * (1 - (opacity + rc)) + mattePass) * (1 - sc)) + (color - mattePass)
 	RifSCWrapper step1 = const1 - (opacity + reflectionCatcher) * noAlpha;
-	RifSCWrapper step2 = background * step1;
+	RifSCWrapper step2;
+
+	bool display = false;
+	auto it = mParams.find("iblDisplay");
+	if (it != mParams.end())
+		display = it->second;
+
+	if (display)
+	{
+		step2 = background * step1;
+	}
+	else {
+		step2 = black * step1;
+	}
 	RifSCWrapper step3 = shadowCatcher * shadowTransp * (const1 - shadowColor);
 	RifSCWrapper step4 = (step2 + mattePass) * (const1 - step3);
 	m_res = step4 + (color - mattePass);
@@ -1952,4 +1980,3 @@ void RifFilterReinhardTonemap::AttachFilter(const RifContextWrapper* rifContext)
 	if (RIF_SUCCESS != rifStatus)
 		throw std::runtime_error("RPR failed to attach Reinhard Tonemap filter to queue.");
 }
-
