@@ -1695,7 +1695,12 @@ void RifFilterReflectionCatcher::AttachFilter(const RifContextWrapper* rifContex
 	// background * (1 - (opacity + rc)) + color
 	RifSCWrapper step1 = const1 - (opacity + reflectionCatcher) * noAlpha;
 	RifSCWrapper step2;
-	bool display = mParams["iblDisplay"];
+
+	bool display = false;
+	auto it = mParams.find("iblDisplay");
+	if (it != mParams.end())
+		display = it->second;
+
 	if (display)
 	{
 		step2 = background * step1;
@@ -1745,7 +1750,12 @@ void RifFilterShadowReflectionCatcher::AttachFilter(const RifContextWrapper* rif
 	// ((background * (1 - (opacity + rc)) + mattePass) * (1 - sc)) + (color - mattePass)
 	RifSCWrapper step1 = const1 - (opacity + reflectionCatcher) * noAlpha;
 	RifSCWrapper step2;
-	bool display = mParams["iblDisplay"];
+
+	bool display = false;
+	auto it = mParams.find("iblDisplay");
+	if (it != mParams.end())
+		display = it->second;
+
 	if (display)
 	{
 		step2 = background * step1;
